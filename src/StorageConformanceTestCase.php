@@ -25,7 +25,8 @@ use function array_column;
  * adapter holding a second connection fails it.
  *
  * Extend it, return a fresh adapter from {@see createStorage()} with {@see tables()} installed and empty, and
- * implement {@see insertOnHostConnection()} with the connection the adapter wraps (raw PDO, Cycle's database).
+ * implement {@see insertOnHostConnection()} and {@see inHostTransaction()} with the connection the adapter wraps
+ * (raw PDO, Cycle's database), the way the host's own code would use it.
  */
 abstract class StorageConformanceTestCase extends TestCase
 {
@@ -44,6 +45,12 @@ abstract class StorageConformanceTestCase extends TestCase
      * @param array<string, mixed> $row
      */
     abstract protected function insertOnHostConnection(string $table, array $row): void;
+
+    /**
+     * Runs `$work` inside a transaction the host opens on its own connection (as its ORM would), committing when it
+     * returns and rolling back and rethrowing when it throws.
+     */
+    abstract protected function inHostTransaction(callable $work): void;
 
     /**
      * Every table the adapter under test must install: Orion's and the conformance entity.
@@ -101,6 +108,37 @@ abstract class StorageConformanceTestCase extends TestCase
         self::assertSame('committed', $result);
         self::assertSame(1, $this->storage->count(self::ENTITY, ['id' => 'e1']));
         self::assertSame(1, $this->storage->count(Schema::OUTBOX, ['document_id' => 'e1']));
+    }
+
+    public function testAnOutboxRowRecordedInsideTheHostsTransactionRollsBackWithIt(): void
+    {
+        $thrown = null;
+        try {
+            $this->inHostTransaction(function (): void {
+                $this->insertOnHostConnection(self::ENTITY, $this->entity('e1', 'Widget', 1));
+                $this->storage->insert(Schema::OUTBOX, $this->outbox('o1', 1, 'e1'));
+                $this->storage->transaction(fn() => $this->storage->insert(Schema::OUTBOX, $this->outbox('o2', 2, 'e1')));
+                $this->failTheWrite();
+            });
+        } catch (RuntimeException $exception) {
+            $thrown = $exception;
+        }
+
+        self::assertNotNull($thrown, 'The host transaction did not rethrow.');
+        self::assertSame(self::FAILURE, $thrown->getMessage(), 'The adapter failed inside the host transaction.');
+        self::assertSame(0, $this->storage->count(self::ENTITY, []));
+        self::assertSame(0, $this->storage->count(Schema::OUTBOX, []));
+    }
+
+    public function testAnOutboxRowRecordedInsideTheHostsTransactionCommitsWithIt(): void
+    {
+        $this->inHostTransaction(function (): void {
+            $this->insertOnHostConnection(self::ENTITY, $this->entity('e1', 'Widget', 1));
+            $this->storage->transaction(fn() => $this->storage->insert(Schema::OUTBOX, $this->outbox('o1', 1, 'e1')));
+        });
+
+        self::assertSame(1, $this->storage->count(self::ENTITY, []));
+        self::assertSame(1, $this->storage->count(Schema::OUTBOX, []));
     }
 
     public function testANestedTransactionRollsBackToItsSavepoint(): void
