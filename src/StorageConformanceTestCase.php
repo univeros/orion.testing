@@ -255,6 +255,13 @@ abstract class StorageConformanceTestCase extends TestCase
         self::assertSame(0, $this->storage->update(self::ENTITY, ['id' => 'missing'], ['name' => 'None']));
     }
 
+    public function testUpdateCountsMatchedRowsEvenWhenNothingChanges(): void
+    {
+        $this->seed();
+
+        self::assertSame(1, $this->storage->update(self::ENTITY, ['id' => 'a'], ['name' => 'Alpha']));
+    }
+
     public function testDeleteRemovesTheMatchingRowsAndCountsThem(): void
     {
         $this->seed();

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Orion\Testing;
 
+use InvalidArgumentException;
 use LogicException;
 use Orion\Adapter\Capability;
 use Orion\Adapter\SchemaAdapter;
@@ -54,6 +55,28 @@ abstract class EngineConformanceTestCase extends TestCase
      * A native query matching every document, in the shape the adapter's `raw()` documents.
      */
     abstract protected function nativeMatchAll(): callable;
+
+    /**
+     * Other native bodies the adapter's `raw()` accepts, by name, each able to match every seeded document: the
+     * scope must hold for every one of them.
+     *
+     * @return array<string, callable>
+     */
+    protected function nativeShapes(): array
+    {
+        return [];
+    }
+
+    /**
+     * Native bodies that would read outside a scope (index-wide aggregations, suggesters): `raw()` must refuse
+     * them with InvalidArgumentException when scope filters are given.
+     *
+     * @return array<string, callable>
+     */
+    protected function nativeScopeEscapes(): array
+    {
+        return [];
+    }
 
     protected function setUp(): void
     {
@@ -107,6 +130,38 @@ abstract class EngineConformanceTestCase extends TestCase
         self::assertSame(['1', '2', '4'], $this->ids($this->search($this->query()->match('title', 'running'))));
     }
 
+    public function testEnsureAcceptsEveryNeutralFieldShapeWithoutDrift(): void
+    {
+        $schema = IndexSchema::for($this->index->value)
+            ->text('plain')
+            ->text('folded', folding: true)
+            ->text('stemmed', language: 'en')
+            ->text('stemmed_folded', language: 'en', folding: true)
+            ->keyword('code', filterable: true, sortable: true, facetable: true)
+            ->geo('at', filterable: true, sortable: true)
+            ->object('address', Field::keyword('city', filterable: true), Field::integer('floor', sortable: true));
+        if ($this->engine->supports(Capability::NestedDocuments)) {
+            $schema = $schema->nested('variants', Field::keyword('size', filterable: true));
+        }
+
+        $this->engine->ensure($schema);
+
+        self::assertTrue($this->engine->plan($schema)->isEmpty());
+    }
+
+    public function testAnAdditivePlanEitherAppliesWithoutDriftOrIsRefused(): void
+    {
+        $this->engine->ensure($this->schema());
+        $desired = $this->schema()->text('summary', language: 'en', folding: true)->with(Field::object('meta', Field::keyword('origin')));
+
+        try {
+            $this->engine->apply($this->engine->plan($desired))->await(self::AWAIT_SECONDS);
+            self::assertTrue($this->engine->plan($desired)->isEmpty());
+        } catch (LogicException) {
+            self::assertFalse($this->engine->plan($desired)->isEmpty(), 'A refused plan must leave the index unchanged.');
+        }
+    }
+
     public function testABreakingPlanIsNeverAppliedInPlace(): void
     {
         $this->engine->ensure($this->schema());
@@ -154,6 +209,34 @@ abstract class EngineConformanceTestCase extends TestCase
         self::assertSame(['ok'], $this->ids($this->search($this->query())));
     }
 
+    public function testWritingToAMissingIndexFailsInsteadOfCreatingIt(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+
+        $this->engine->index($this->index, ...$this->corpus());
+    }
+
+    public function testDeletingFromAMissingIndexFails(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+
+        $this->engine->delete($this->index, new Tombstone('1', 1));
+    }
+
+    public function testAValueOfTheWrongTypeFailsThatDocumentOnly(): void
+    {
+        $this->engine->ensure($this->schema());
+
+        $result = $this->engine->index(
+            $this->index,
+            new Document('ok', ['title' => 'Fine', 'stock' => 3, 'embedding' => [1.0, 0.0, 0.0]], 1),
+            new Document('text_in_integer', ['title' => 'Bad', 'stock' => 'many'], 1),
+            new Document('short_vector', ['title' => 'Bad', 'embedding' => [1.0, 0.0]], 1),
+        )->await(self::AWAIT_SECONDS);
+
+        self::assertSame(['text_in_integer', 'short_vector'], array_map(static fn(WriteOutcome $o): string => $o->id, $result->failures()));
+    }
+
     public function testDeletesRemoveDocuments(): void
     {
         $this->seed();
@@ -177,6 +260,7 @@ abstract class EngineConformanceTestCase extends TestCase
         }
 
         self::assertSame(WriteStatus::Applied, $this->write($this->document('1', 'Version ten', 10)));
+        self::assertArrayNotHasKey('price', $this->source('1'), 'A write replaces the document; it does not merge into it.');
         self::assertSame(WriteStatus::Stale, $this->write($this->document('1', 'Version seven', 7)));
         self::assertSame(WriteStatus::Stale, $this->write($this->document('1', 'Version ten again', 10)));
         self::assertSame('Version ten', $this->source('1')['title']);
@@ -187,6 +271,10 @@ abstract class EngineConformanceTestCase extends TestCase
         self::assertSame(WriteStatus::Applied, $this->remove(new Tombstone('1', 11)));
         self::assertSame(WriteStatus::Stale, $this->write($this->document('1', 'Replayed after the delete', 10)));
         self::assertSame([], $this->ids($this->search($this->query()->filter(Filter::term('sku', 'A1')))));
+
+        // A delete that arrives before an older write of a document never indexed still wins.
+        self::assertSame(WriteStatus::Applied, $this->remove(new Tombstone('9', 5)));
+        self::assertSame(WriteStatus::Stale, $this->write($this->document('9', 'Older than its delete', 3)));
     }
 
     // --- lexical clauses ---------------------------------------------------------------------------------------
@@ -206,6 +294,7 @@ abstract class EngineConformanceTestCase extends TestCase
 
         self::assertSame(['3'], $this->ids($this->search($this->query()->term('sku', 'C3'))));
         self::assertSame(['1', '3'], $this->ids($this->search($this->query()->term('brand', 'acme'))));
+        self::assertSame([], $this->ids($this->search($this->query()->term('brand', 'ACME'))), 'term is exact: it does not fold case.');
     }
 
     public function testPrefixMatchesTheStartOfATerm(): void
@@ -213,6 +302,7 @@ abstract class EngineConformanceTestCase extends TestCase
         $this->seed();
 
         self::assertSame(['3'], $this->ids($this->search($this->query()->prefix('title', 'hik'))));
+        self::assertSame(['1'], $this->ids($this->search($this->query()->prefix('sku', 'A'))));
     }
 
     public function testPhraseNeedsTheTermsAdjacentAndInOrder(): void
@@ -331,6 +421,23 @@ abstract class EngineConformanceTestCase extends TestCase
         self::assertNotFalse(stripos($hits[0]->highlights['title'][0], 'hiking'));
     }
 
+    public function testHighlightsAreHtmlSafe(): void
+    {
+        $this->engine->ensure($this->schema());
+        $this->engine->index($this->index, new Document('x', ['title' => 'Hiking <img src=x onerror=alert(1)> & more', 'sku' => 'X1'], 1))->await(self::AWAIT_SECONDS);
+        $this->engine->flush($this->index, await: true);
+        $query = $this->query()->match('title', 'hiking')->highlight('title');
+        if (!$this->engine->supports(Capability::Highlighting)) {
+            $this->expectException(UnsupportedClause::class);
+        }
+
+        $fragment = $this->search($query)->hits[0]->highlights['title'][0] ?? '';
+
+        self::assertStringContainsString('<em>Hiking</em>', $fragment);
+        self::assertStringNotContainsString('<img', $fragment);
+        self::assertStringContainsString('&lt;img', $fragment);
+    }
+
     // --- vectors and hybrid -------------------------------------------------------------------------------------
 
     public function testVectorSearchReturnsTheNearestNeighbours(): void
@@ -383,6 +490,34 @@ abstract class EngineConformanceTestCase extends TestCase
         $results = $this->engine->raw($this->index, $this->nativeMatchAll(), Filter::term('brand', 'acme'), Filter::term('in_stock', true));
 
         self::assertSame(['1', '3'], $this->ids($results));
+    }
+
+    public function testTheScopeHoldsForEveryNativeShape(): void
+    {
+        $this->seed();
+        foreach ($this->nativeShapes() as $name => $native) {
+            $results = $this->engine->raw($this->index, $native, Filter::term('brand', 'acme'));
+
+            self::assertNotSame([], $results->hits, "The native shape '$name' matched nothing.");
+            foreach ($results->hits as $hit) {
+                self::assertSame('acme', $hit->source['brand'] ?? null, "The native shape '$name' escaped its scope with document {$hit->id}.");
+            }
+        }
+        $this->addToAssertionCount(1);
+    }
+
+    public function testNativeShapesThatReadOutsideTheScopeAreRefused(): void
+    {
+        $this->seed();
+        foreach ($this->nativeScopeEscapes() as $name => $native) {
+            try {
+                $this->engine->raw($this->index, $native, Filter::term('brand', 'acme'));
+                self::fail("The native shape '$name' was run under a scope it can read past.");
+            } catch (InvalidArgumentException) {
+                $this->addToAssertionCount(1);
+            }
+        }
+        $this->addToAssertionCount(1);
     }
 
     // --- fixtures -----------------------------------------------------------------------------------------------
