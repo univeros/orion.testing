@@ -11,7 +11,8 @@
     ],
     "require": {
         "php": ">=8.3",
-        "orion-search/core": "^0.1"
+        "orion-search/core": "^0.1",
+        "phpunit/phpunit": "^12.5"
     },
     "autoload": {
         "psr-4": {
