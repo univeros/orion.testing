@@ -1,0 +1,31 @@
+{
+    "name": "orion-search/testing",
+    "description": "In-memory storage, conformance test cases for engine and storage adapters, fault injection and fakes for testing Orion and applications built on it",
+    "type": "library",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "2am.tech",
+            "homepage": "https://2am.tech"
+        }
+    ],
+    "require": {
+        "php": ">=8.3",
+        "orion-search/core": "^0.1"
+    },
+    "autoload": {
+        "psr-4": {
+            "Orion\\Testing\\": "src/"
+        }
+    },
+    "extra": {
+        "branch-alias": {
+            "dev-main": "0.1.x-dev"
+        }
+    },
+    "config": {
+        "sort-packages": true
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}
