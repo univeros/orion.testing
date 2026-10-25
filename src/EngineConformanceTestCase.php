@@ -63,7 +63,10 @@ abstract class EngineConformanceTestCase extends TestCase
 
     protected function tearDown(): void
     {
-        $this->engine->drop($this->index);
+        // A subclass may skip in setUp() before the engine exists.
+        if (isset($this->engine)) {
+            $this->engine->drop($this->index);
+        }
     }
 
     // --- schema ---------------------------------------------------------------------------------------------
