@@ -25,6 +25,7 @@ use Orion\Schema\Field;
 use Orion\Schema\IndexSchema;
 use Orion\Schema\MigrationPlan;
 use Orion\Storage\Schema;
+use Orion\Storage\Storage;
 use Orion\Tenancy\Tenancy;
 use Orion\Wiring\Config;
 use Orion\Wiring\Graph;
@@ -58,6 +59,15 @@ abstract class LifecycleDeterminismTestCase extends TestCase
     private SettableClock $clock;
 
     abstract protected function createEngine(): SearchAdapter&SchemaAdapter&WriteAdapter;
+
+    /**
+     * A fresh, empty storage with Orion's tables, for each run: in memory by default; a storage adapter's own suite
+     * (the Univeros module's Cycle storage, say) runs the harness on itself by overriding this.
+     */
+    protected function createStorage(): Storage
+    {
+        return new InMemoryStorage();
+    }
 
     protected function setUp(): void
     {
@@ -399,7 +409,7 @@ abstract class LifecycleDeterminismTestCase extends TestCase
     private function freshGraph(): Graph
     {
         return Orion::create(new Config(
-            storage: new InMemoryStorage(),
+            storage: $this->createStorage(),
             engines: new EngineRegistry(...[self::ENGINE => $this->engine, self::OTHER_ENGINE => new InMemoryEngine()]),
             tenancy: Tenancy::single(),
             clock: $this->clock = new SettableClock(new DateTimeImmutable('2026-10-26 12:00:00+00:00')),

@@ -47,6 +47,11 @@ final class AliasingEngine implements SearchAdapter, SchemaAdapter, WriteAdapter
         $this->aliases[$alias->value] = $physical->value;
     }
 
+    public function resolve(IndexName $alias): ?IndexName
+    {
+        return isset($this->aliases[$alias->value]) ? IndexName::of($this->aliases[$alias->value]) : null;
+    }
+
     public function supports(Capability $capability): bool
     {
         return $capability === Capability::NativeAliases || $this->inner->supports($capability);
@@ -54,12 +59,12 @@ final class AliasingEngine implements SearchAdapter, SchemaAdapter, WriteAdapter
 
     public function search(IndexName $index, Query $query): ResultSet
     {
-        return $this->inner->search($this->resolve($index), $query);
+        return $this->inner->search($this->target($index), $query);
     }
 
     public function raw(IndexName $index, callable $native, Filter ...$scope): ResultSet
     {
-        return $this->inner->raw($this->resolve($index), $native, ...$scope);
+        return $this->inner->raw($this->target($index), $native, ...$scope);
     }
 
     public function ensure(IndexSchema $schema): void
@@ -73,7 +78,7 @@ final class AliasingEngine implements SearchAdapter, SchemaAdapter, WriteAdapter
 
     public function inspect(IndexName $index): ?LiveSchema
     {
-        return $this->inner->inspect($this->resolve($index));
+        return $this->inner->inspect($this->target($index));
     }
 
     public function plan(IndexSchema $desired): MigrationPlan
@@ -97,21 +102,21 @@ final class AliasingEngine implements SearchAdapter, SchemaAdapter, WriteAdapter
 
     public function index(IndexName $index, Document ...$docs): BulkResult
     {
-        return $this->inner->index($this->resolve($index), ...$docs);
+        return $this->inner->index($this->target($index), ...$docs);
     }
 
     public function delete(IndexName $index, Tombstone ...$tombstones): BulkResult
     {
-        return $this->inner->delete($this->resolve($index), ...$tombstones);
+        return $this->inner->delete($this->target($index), ...$tombstones);
     }
 
     public function flush(IndexName $index, bool $await = false): void
     {
-        $this->inner->flush($this->resolve($index), $await);
+        $this->inner->flush($this->target($index), $await);
     }
 
-    private function resolve(IndexName $index): IndexName
+    private function target(IndexName $index): IndexName
     {
-        return isset($this->aliases[$index->value]) ? IndexName::of($this->aliases[$index->value]) : $index;
+        return $this->resolve($index) ?? $index;
     }
 }

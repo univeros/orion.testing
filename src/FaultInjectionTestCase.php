@@ -16,6 +16,7 @@ use Orion\Receipt\SodiumSigner;
 use Orion\Registry\EngineRegistry;
 use Orion\Schema\IndexSchema;
 use Orion\Storage\Schema;
+use Orion\Storage\Storage;
 use Orion\Tenancy\Tenancy;
 use Orion\Wiring\Config;
 use Orion\Wiring\Graph;
@@ -49,10 +50,19 @@ abstract class FaultInjectionTestCase extends TestCase
 
     abstract protected function createEngine(): SearchAdapter&SchemaAdapter&WriteAdapter;
 
+    /**
+     * A fresh, empty storage with Orion's tables, for each run: in memory by default; a storage adapter's own suite
+     * (the Univeros module's Cycle storage, say) runs the harness on itself by overriding this.
+     */
+    protected function createStorage(): Storage
+    {
+        return new InMemoryStorage();
+    }
+
     protected function setUp(): void
     {
         $this->engine = new FaultyEngine($this->createEngine());
-        $this->storage = new FaultyStorage(new InMemoryStorage());
+        $this->storage = new FaultyStorage($this->createStorage());
         $this->alias = IndexName::of('orion_faults_' . bin2hex(random_bytes(6)));
         $this->graph = Orion::create(new Config(
             storage: $this->storage,

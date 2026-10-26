@@ -205,6 +205,31 @@ abstract class EngineConformanceTestCase extends TestCase
         }
     }
 
+    public function testTheEngineReportsWhereAnAliasPointsOrIsRefused(): void
+    {
+        $alias = $this->index;
+        $v1 = IndexName::of($alias->value . '_v1');
+        $v2 = IndexName::of($alias->value . '_v2');
+        if (!$this->engine->supports(Capability::NativeAliases)) {
+            $this->expectException(UnsupportedClause::class);
+
+            $this->engine->resolve($alias);
+        }
+
+        try {
+            self::assertNull($this->engine->resolve($alias), 'An alias never set points nowhere.');
+            $this->engine->ensure($this->schema()->named($v1));
+            $this->engine->ensure($this->schema()->named($v2));
+            $this->engine->alias($alias, $v1);
+            self::assertSame($v1->value, $this->engine->resolve($alias)?->value);
+            $this->engine->alias($alias, $v2);
+            self::assertSame($v2->value, $this->engine->resolve($alias)?->value);
+        } finally {
+            $this->engine->drop($v1);
+            $this->engine->drop($v2);
+        }
+    }
+
     public function testDropRemovesTheIndexAndToleratesAMissingOne(): void
     {
         $this->engine->ensure($this->schema());

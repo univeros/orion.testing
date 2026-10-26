@@ -160,6 +160,12 @@ final class FaultyEngine implements SearchAdapter, SchemaAdapter, WriteAdapter
     }
 
     #[Override]
+    public function resolve(IndexName $alias): ?IndexName
+    {
+        return $this->inner->resolve($alias);
+    }
+
+    #[Override]
     public function index(IndexName $index, Document ...$docs): BulkResult
     {
         $this->calls[self::INDEX . ':' . $index->value] = ($this->calls[self::INDEX . ':' . $index->value] ?? 0) + 1;
