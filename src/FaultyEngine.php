@@ -29,6 +29,7 @@ use function sprintf;
  * write reach the engine for its first documents and then dies; {@see killBefore()} dies before a verb acts;
  * {@see killAfter()} lets the verb act and then dies, so the caller never hears that it succeeded (an alias swap
  * acknowledged by the engine but lost on the way back). Each fault fires once; {@see revive()} clears what is left.
+ * {@see onBulk()} runs a callback before each bulk write reaches the engine: the application writing while Orion works.
  */
 final class FaultyEngine implements SearchAdapter, SchemaAdapter, WriteAdapter
 {
@@ -46,6 +47,8 @@ final class FaultyEngine implements SearchAdapter, SchemaAdapter, WriteAdapter
     private ?int $bulkSurvivors = null;
     /** @var array<string, int> */
     private array $calls = [];
+    /** @var (callable(IndexName, int): void)|null */
+    private $onBulk = null;
 
     public function __construct(private readonly SearchAdapter&SchemaAdapter&WriteAdapter $inner)
     {
@@ -67,6 +70,14 @@ final class FaultyEngine implements SearchAdapter, SchemaAdapter, WriteAdapter
     public function killDuringBulk(int $documents): void
     {
         $this->bulkSurvivors = $documents;
+    }
+
+    /**
+     * @param (callable(IndexName $index, int $call): void)|null $hook called with the target and the bulk write's number for that target, from 1
+     */
+    public function onBulk(?callable $hook): void
+    {
+        $this->onBulk = $hook;
     }
 
     public function revive(): void
@@ -138,6 +149,10 @@ final class FaultyEngine implements SearchAdapter, SchemaAdapter, WriteAdapter
     #[Override]
     public function index(IndexName $index, Document ...$docs): BulkResult
     {
+        $this->calls[self::INDEX . ':' . $index->value] = ($this->calls[self::INDEX . ':' . $index->value] ?? 0) + 1;
+        if ($this->onBulk !== null) {
+            ($this->onBulk)($index, $this->calls[self::INDEX . ':' . $index->value]);
+        }
         if ($this->bulkSurvivors !== null && $docs !== []) {
             $survivors = $this->bulkSurvivors;
             $this->bulkSurvivors = null;

@@ -32,7 +32,9 @@ use Orion\Write\Document;
 use PHPUnit\Framework\TestCase;
 
 use function array_map;
+use function array_reverse;
 use function bin2hex;
+use function ksort;
 use function random_bytes;
 use function sort;
 
@@ -53,6 +55,7 @@ abstract class LifecycleDeterminismTestCase extends TestCase
     private SearchAdapter&SchemaAdapter&WriteAdapter $engine;
     private IndexName $alias;
     private Graph $graph;
+    private SettableClock $clock;
 
     abstract protected function createEngine(): SearchAdapter&SchemaAdapter&WriteAdapter;
 
@@ -66,7 +69,7 @@ abstract class LifecycleDeterminismTestCase extends TestCase
     protected function tearDown(): void
     {
         if (isset($this->engine)) {
-            $this->engine->drop($this->physical(1));
+            $this->dropVersions();
         }
     }
 
@@ -85,6 +88,21 @@ abstract class LifecycleDeterminismTestCase extends TestCase
         self::assertSame(Operation::Unchanged->value, $first[1]['outcome']['operation']);
         self::assertSame(Operation::Applied->value, $first[2]['outcome']['operation']);
         self::assertSame(Operation::ReindexRequired->value, $first[4]['outcome']['operation']);
+    }
+
+    public function testAReindexIsReproducibleAndLosesNothing(): void
+    {
+        $first = $this->reindexTranscript();
+        $this->reset();
+
+        $second = $this->reindexTranscript();
+
+        self::assertSame($first, $second);
+        self::assertSame(['d2' => 'S2', 'd4' => 'S4', 'd5' => 'S5', 'd6' => 'S6', 'd7' => 'S7'], $first['documents']);
+        self::assertSame([$this->physical(1)->value], $first['dropped']);
+        self::assertSame([$this->physical(2)->value], $first['registry']);
+        self::assertSame(['created', 'reindexed', 'dropped'], array_map(static fn(array $r): mixed => $r['operation'], array_reverse($first['receipts'])));
+        self::assertTrue($this->graph->verifier()->verify()->ok());
     }
 
     public function testApplyingTheSameSchemaAgainChangesNothing(): void
@@ -322,10 +340,60 @@ abstract class LifecycleDeterminismTestCase extends TestCase
         return $transcript;
     }
 
+    /**
+     * Create, write and drain, reindex with a breaking change in small batches, write and drain again, then prune
+     * after the grace window: everything a run leaves behind, comparable across runs.
+     *
+     * @return array{reindex: array<string, mixed>, documents: array<string, mixed>, dropped: list<string>, registry: list<string>, receipts: list<array<string, mixed>>, live: array<string, mixed>|null}
+     */
+    private function reindexTranscript(): array
+    {
+        $this->planner()->apply($this->schema());
+        $outbox = $this->graph->outbox();
+        for ($i = 1; $i <= 6; ++$i) {
+            $outbox->index($this->alias, 'd' . $i, ['title' => 'Trail shoe ' . $i, 'sku' => 'S' . $i]);
+        }
+        $outbox->delete($this->alias, 'd3');
+        $this->graph->drain()->run($this->alias);
+        $breaking = IndexSchema::for($this->alias->value)->text('title', language: 'en')->keyword('sku', filterable: true, sortable: true);
+
+        $result = $this->graph->reindexer(self::ENGINE)->reindex($breaking, batch: 2);
+        $outbox->index($this->alias, 'd7', ['title' => 'Trail shoe 7', 'sku' => 'S7']);
+        $outbox->delete($this->alias, 'd1');
+        $this->graph->drain()->run($this->alias);
+        $this->clock->advance('+301 seconds');
+        $dropped = $this->graph->reindexer(self::ENGINE)->prune($this->alias, graceSeconds: 300);
+
+        $target = $this->graph->aliases()->target($this->alias);
+        $this->engine->flush($target, await: true);
+        $documents = [];
+        foreach ($this->engine->search($target, Query::on($this->alias->value)->paginate(1, 100))->hits as $hit) {
+            $documents[$hit->id] = $hit->source['sku'] ?? null;
+        }
+        ksort($documents);
+        $live = $this->engine->inspect($this->physical(2));
+
+        return [
+            'reindex' => $result->toArray(),
+            'documents' => $documents,
+            'dropped' => array_map(static fn(IndexRegistration $r): string => $r->physical->value, $dropped),
+            'registry' => array_map(static fn(IndexRegistration $r): string => $r->physical->value, $this->graph->registry()->versions($this->alias)),
+            'receipts' => array_map(static fn(Receipt $r): array => $r->toArray(), $this->graph->receipts()->of($this->alias)),
+            'live' => $live === null ? null : Field::mapToArray($live->fields),
+        ];
+    }
+
     private function reset(): void
     {
-        $this->engine->drop($this->physical(1));
+        $this->dropVersions();
         $this->graph = $this->freshGraph();
+    }
+
+    private function dropVersions(): void
+    {
+        foreach ([1, 2, 3] as $version) {
+            $this->engine->drop($this->physical($version));
+        }
     }
 
     private function freshGraph(): Graph
@@ -334,7 +402,7 @@ abstract class LifecycleDeterminismTestCase extends TestCase
             storage: new InMemoryStorage(),
             engines: new EngineRegistry(...[self::ENGINE => $this->engine, self::OTHER_ENGINE => new InMemoryEngine()]),
             tenancy: Tenancy::single(),
-            clock: new FixedClock(new DateTimeImmutable('2026-10-26 12:00:00')),
+            clock: $this->clock = new SettableClock(new DateTimeImmutable('2026-10-26 12:00:00+00:00')),
             receiptSigner: SodiumSigner::fromSeed(self::SEED, self::NATIVE_KEY),
         ))->graph();
     }
