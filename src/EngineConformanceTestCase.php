@@ -172,6 +172,38 @@ abstract class EngineConformanceTestCase extends TestCase
         $this->engine->apply($plan);
     }
 
+    public function testAnAliasPointsAtOnePhysicalIndexAtATimeOrIsRefused(): void
+    {
+        $alias = $this->index;
+        $v1 = IndexName::of($alias->value . '_v1');
+        $v2 = IndexName::of($alias->value . '_v2');
+        if (!$this->engine->supports(Capability::NativeAliases)) {
+            $this->expectException(UnsupportedClause::class);
+
+            $this->engine->alias($alias, $v1);
+        }
+
+        try {
+            $this->engine->ensure($this->schema()->named($v1));
+            $this->engine->index($v1, $this->corpus()[0])->await(self::AWAIT_SECONDS);
+            $this->engine->flush($v1, await: true);
+            $this->engine->alias($alias, $v1);
+            self::assertSame(['1'], $this->ids($this->search($this->query())), 'Searching the alias reaches the physical index.');
+            self::assertTrue(MigrationPlan::between($this->schema(), $this->engine->inspect($alias))->isEmpty(), 'Inspecting the alias reads the physical index.');
+
+            $this->engine->ensure($this->schema()->keyword('color')->named($v2));
+            $this->engine->index($v2, $this->corpus()[1])->await(self::AWAIT_SECONDS);
+            $this->engine->flush($v2, await: true);
+            $this->engine->alias($alias, $v2);
+            self::assertSame(['2'], $this->ids($this->search($this->query())), 'The swap moves the alias off the old index.');
+            self::assertSame(['color'], array_map(static fn($change): string => $change->path, MigrationPlan::between($this->schema()->keyword('color'), $this->engine->inspect($v1))->additive()), 'The old index is left as it was.');
+            self::assertTrue(MigrationPlan::between($this->schema()->keyword('color'), $this->engine->inspect($alias))->isEmpty());
+        } finally {
+            $this->engine->drop($v1);
+            $this->engine->drop($v2);
+        }
+    }
+
     public function testDropRemovesTheIndexAndToleratesAMissingOne(): void
     {
         $this->engine->ensure($this->schema());
