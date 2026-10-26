@@ -10,6 +10,9 @@ use LogicException;
 use Orion\Storage\Column;
 use Orion\Storage\Condition;
 use Orion\IndexName;
+use Orion\Outbox\Entry;
+use Orion\Outbox\EntryKind;
+use Orion\Outbox\Outbox;
 use Orion\Registry\IndexRegistration;
 use Orion\Schema\IndexSchema;
 use Orion\Storage\Schema;
@@ -21,12 +24,13 @@ use PHPUnit\Framework\TestCase;
 use RuntimeException;
 
 use function array_column;
+use function array_map;
 
 /**
  * What every {@see Storage} adapter must do before it is an Orion storage adapter (docs/spec/revision.md §4):
  * the criteria grammar, ordering and paging, affected-row counts, identifier and value safety, and transactions
  * on the host's connection. The same-connection test is the gate: an entity row written through the host's own
- * connection and an outbox row written through the adapter, in one adapter transaction, roll back together. An
+ * connection and an outbox entry recorded through the adapter, in one adapter transaction, roll back together. An
  * adapter holding a second connection fails it.
  *
  * Extend it, return a fresh adapter from {@see createStorage()} with {@see tables()} installed and empty, and
@@ -82,13 +86,13 @@ abstract class StorageConformanceTestCase extends TestCase
         $this->storage = $this->createStorage();
     }
 
-    public function testAnEntityRowAndAnOutboxRowRollBackTogether(): void
+    public function testAnEntityRowAndAnOutboxEntryRollBackTogether(): void
     {
         $thrown = null;
         try {
             $this->storage->transaction(function (): void {
                 $this->insertOnHostConnection(self::ENTITY, $this->entity('e1', 'Widget', 1));
-                $this->storage->insert(Schema::OUTBOX, $this->outbox(1, 'e1'));
+                $this->outbox()->index(IndexName::of('products'), 'e1', ['title' => 'Widget']);
                 $this->failTheWrite();
             });
         } catch (RuntimeException $exception) {
@@ -99,13 +103,14 @@ abstract class StorageConformanceTestCase extends TestCase
         self::assertSame(self::FAILURE, $thrown->getMessage());
         self::assertSame(0, $this->storage->count(self::ENTITY, []));
         self::assertSame(0, $this->storage->count(Schema::OUTBOX, []));
+        self::assertSame(0, $this->outbox()->head(IndexName::of('products')));
     }
 
-    public function testAnEntityRowAndAnOutboxRowCommitTogether(): void
+    public function testAnEntityRowAndAnOutboxEntryCommitTogether(): void
     {
         $result = $this->storage->transaction(function (): string {
             $this->insertOnHostConnection(self::ENTITY, $this->entity('e1', 'Widget', 1));
-            $this->storage->insert(Schema::OUTBOX, $this->outbox(1, 'e1'));
+            $this->outbox()->index(IndexName::of('products'), 'e1', ['title' => 'Widget']);
 
             return 'committed';
         });
@@ -115,14 +120,14 @@ abstract class StorageConformanceTestCase extends TestCase
         self::assertSame(1, $this->storage->count(Schema::OUTBOX, ['document_id' => 'e1']));
     }
 
-    public function testAnOutboxRowRecordedInsideTheHostsTransactionRollsBackWithIt(): void
+    public function testAnOutboxEntryRecordedInsideTheHostsTransactionRollsBackWithIt(): void
     {
         $thrown = null;
         try {
             $this->inHostTransaction(function (): void {
                 $this->insertOnHostConnection(self::ENTITY, $this->entity('e1', 'Widget', 1));
-                $this->storage->insert(Schema::OUTBOX, $this->outbox(1, 'e1'));
-                $this->storage->transaction(fn() => $this->storage->insert(Schema::OUTBOX, $this->outbox(2, 'e2')));
+                $this->outbox()->index(IndexName::of('products'), 'e1', ['title' => 'Widget']);
+                $this->outbox()->index(IndexName::of('products'), 'e2', ['title' => 'Gadget']);
                 $this->failTheWrite();
             });
         } catch (RuntimeException $exception) {
@@ -133,17 +138,36 @@ abstract class StorageConformanceTestCase extends TestCase
         self::assertSame(self::FAILURE, $thrown->getMessage(), 'The adapter failed inside the host transaction.');
         self::assertSame(0, $this->storage->count(self::ENTITY, []));
         self::assertSame(0, $this->storage->count(Schema::OUTBOX, []));
+        self::assertSame(0, $this->outbox()->head(IndexName::of('products')), 'The offset was not rolled back with the entry.');
     }
 
-    public function testAnOutboxRowRecordedInsideTheHostsTransactionCommitsWithIt(): void
+    public function testAnOutboxEntryRecordedInsideTheHostsTransactionCommitsWithIt(): void
     {
         $this->inHostTransaction(function (): void {
             $this->insertOnHostConnection(self::ENTITY, $this->entity('e1', 'Widget', 1));
-            $this->storage->transaction(fn() => $this->storage->insert(Schema::OUTBOX, $this->outbox(1, 'e1')));
+            $this->outbox()->index(IndexName::of('products'), 'e1', ['title' => 'Widget']);
         });
 
         self::assertSame(1, $this->storage->count(self::ENTITY, []));
-        self::assertSame(1, $this->storage->count(Schema::OUTBOX, []));
+        self::assertSame(1, $this->outbox()->head(IndexName::of('products')));
+    }
+
+    public function testAnOutboxEntryRoundTripsThroughTheDatabase(): void
+    {
+        $fields = ['title' => 'Lámpara "de pie"', 'price' => 10.0, 'stock' => 3, 'tags' => ['a', 'b'], 'dims' => ['h' => 1.5], 'note' => null];
+        $outbox = $this->outbox();
+        $outbox->index(IndexName::of('products'), 'p1', $fields);
+        $outbox->index(IndexName::of('products'), 'p2', ['title' => 'Desk']);
+        $outbox->index(IndexName::of('products'), 'p1', $fields);
+        $outbox->delete(IndexName::of('products'), 'p2');
+
+        $entries = $outbox->after(IndexName::of('products'), 0, 10);
+
+        self::assertSame([3, 4], array_map(static fn(Entry $e): int => $e->offset, $entries));
+        // A JSON column may reorder keys; the values and their types must survive it.
+        self::assertSame(Canonical::sort($fields), Canonical::sort($entries[0]->fields ?? []));
+        self::assertSame(EntryKind::Delete, $entries[1]->kind);
+        self::assertSame('2026-10-26T12:00:00+00:00', $entries[0]->recordedAt->format(DATE_ATOM));
     }
 
     public function testANestedTransactionRollsBackToItsSavepoint(): void
@@ -458,19 +482,9 @@ abstract class StorageConformanceTestCase extends TestCase
         return ['id' => $id, 'name' => $name, 'position' => $position, 'created_at' => new DateTimeImmutable($createdAt)];
     }
 
-    /**
-     * @return array<string, mixed>
-     */
-    private function outbox(int $offset, string $documentId): array
+    private function outbox(): Outbox
     {
-        return [
-            'outbox_offset' => $offset,
-            'index_name' => 'products',
-            'document_id' => $documentId,
-            'operation' => 'index',
-            'payload' => '{"title":"Widget"}',
-            'recorded_at' => new DateTimeImmutable('2026-01-01 00:00:00'),
-        ];
+        return new Outbox($this->storage, new FixedClock(new DateTimeImmutable('2026-10-26 12:00:00+00:00')));
     }
 
     /**
