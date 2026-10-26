@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Orion\Testing;
 
-use LogicException;
+use Orion\Tenancy\NoTenant;
 use Orion\Tenancy\TenantResolver;
 use Orion\Tenancy\TenantScope;
 
@@ -20,6 +20,6 @@ final class SettableResolver implements TenantResolver
 
     public function resolve(): TenantScope
     {
-        return new TenantScope($this->tenant ?? throw new LogicException('No tenant in this context.'));
+        return new TenantScope($this->tenant ?? throw new NoTenant('No tenant in this context.'));
     }
 }

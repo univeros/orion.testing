@@ -4,14 +4,12 @@ declare(strict_types=1);
 
 namespace Orion\Testing;
 
-use Orion\Wiring\Config;
-use Orion\Tenancy\Tenancy;
-use Orion\Registry\EngineRegistry;
-use Orion\Orion;
-use Orion\Adapter\InMemory\InMemoryEngine;
 use DateTimeImmutable;
 use InvalidArgumentException;
 use LogicException;
+use Orion\Adapter\InMemory\InMemoryEngine;
+use Orion\Orion;
+use Orion\Registry\EngineRegistry;
 use Orion\Storage\Column;
 use Orion\Storage\Condition;
 use Orion\Storage\DuplicateKey;
@@ -29,6 +27,8 @@ use Orion\Storage\Schema;
 use Orion\Storage\Storage;
 use Orion\Storage\Table;
 use Orion\Support\Canonical;
+use Orion\Tenancy\Tenancy;
+use Orion\Wiring\Config;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;

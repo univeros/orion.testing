@@ -105,27 +105,31 @@ abstract class TenancyIsolationTestCase extends TestCase
 
     public function testNoQueryReturnsAForeignDocument(): void
     {
+        $all = ['p1', 'p2', 'p3'];
         $queries = [
-            'everything' => $this->query(),
-            'text' => $this->query()->match('title', 'running'),
-            'phrase' => $this->query()->phrase('title', 'trail running'),
-            'prefix' => $this->query()->prefix('sku', 'G'),
-            'term on a foreign value' => $this->query()->term('brand', 'GlobexOnly'),
-            'filter on the foreign tenant' => $this->query()->filter(Filter::term(self::ORG_KEY, self::GLOBEX)),
-            'either tenant' => $this->query()->filter(Filter::terms(self::ORG_KEY, [self::ACME, self::GLOBEX])),
-            'should widen' => $this->query()->filter(Filter::bool(should: [Filter::term(self::ORG_KEY, self::GLOBEX), Filter::exists('sku')])),
-            'must not exclude acme' => $this->query()->filter(Filter::bool(mustNot: [Filter::term(self::ORG_KEY, self::ACME)])),
-            'range' => $this->query()->filter(Filter::range('stock', gte: 0)),
-            'sorted and paged' => $this->query()->sort('sku')->paginate(1, 2),
-            'second page' => $this->query()->sort('sku')->paginate(2, 2),
-            'nearest is foreign' => $this->query()->vector('embedding', [0.0, 1.0, 0.0], 10),
-            'nearest, filtered to the foreign tenant' => $this->query()->vector('embedding', [0.0, 1.0, 0.0], 10)->filter(Filter::term(self::ORG_KEY, self::GLOBEX)),
+            'everything' => [$this->query(), $all],
+            'text' => [$this->query()->match('title', 'running'), ['p1', 'p2']],
+            'phrase' => [$this->query()->phrase('title', 'trail running'), ['p1']],
+            'prefix of foreign skus' => [$this->query()->prefix('sku', 'G'), []],
+            'term on a foreign value' => [$this->query()->term('brand', 'GlobexOnly'), []],
+            'filter on the foreign tenant' => [$this->query()->filter(Filter::term(self::ORG_KEY, self::GLOBEX)), []],
+            'either tenant' => [$this->query()->filter(Filter::terms(self::ORG_KEY, [self::ACME, self::GLOBEX])), $all],
+            'should widen' => [$this->query()->filter(Filter::bool(should: [Filter::term(self::ORG_KEY, self::GLOBEX), Filter::exists('sku')])), $all],
+            'must not exclude acme' => [$this->query()->filter(Filter::bool(mustNot: [Filter::term(self::ORG_KEY, self::ACME)])), []],
+            'range' => [$this->query()->filter(Filter::range('stock', gte: 0)), $all],
+            'sorted and paged' => [$this->query()->sort('sku')->paginate(1, 2), ['p1', 'p2']],
+            'second page' => [$this->query()->sort('sku')->paginate(2, 2), ['p3']],
+            'nearest is foreign' => [$this->query()->vector('embedding', [0.0, 1.0, 0.0], 10), $all],
+            // Every foreign document is nearer: a tenant filter applied after the top k would leave nothing.
+            'the k nearest are all foreign' => [$this->query()->vector('embedding', [0.0, 1.0, 0.2], 2), ['p2', 'p3']],
+            'nearest, filtered to the foreign tenant' => [$this->query()->vector('embedding', [0.0, 1.0, 0.0], 10)->filter(Filter::term(self::ORG_KEY, self::GLOBEX)), []],
         ];
 
-        foreach ($queries as $name => $query) {
-            $this->assertOnlyAcme($this->graph->searcher()->search($query), $name);
+        foreach ($queries as $name => [$query, $expected]) {
+            $results = $this->graph->searcher()->search($query);
+            $this->assertOnlyAcme($results, $name);
+            self::assertSame($expected, $this->ids($results), $name);
         }
-        self::assertSame(['p1', 'p2', 'p3'], $this->ids($this->graph->searcher()->search($this->query())));
     }
 
     public function testFacetsAndHighlightsShowOnlyTheTenant(): void
@@ -185,6 +189,14 @@ abstract class TenancyIsolationTestCase extends TestCase
 
         $this->assertOnlyAcme($this->graph->searcher()->search($this->query()), 'after a reindex');
         self::assertSame(['p1', 'p2', 'p3'], $this->ids($this->graph->searcher()->search($this->query())));
+    }
+
+    /**
+     * The alias the tenants share, for native queries that name it.
+     */
+    protected function indexName(): string
+    {
+        return $this->alias->value;
     }
 
     protected function schema(): IndexSchema
