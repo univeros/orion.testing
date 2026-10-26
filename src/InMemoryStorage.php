@@ -9,17 +9,27 @@ use DateTimeInterface;
 use DateTimeZone;
 use InvalidArgumentException;
 use LogicException;
+use Orion\Storage\Column;
 use Orion\Storage\Condition;
+use Orion\Storage\DuplicateKey;
+use Orion\Storage\Index;
+use Orion\Storage\Schema;
+use Orion\Storage\Table;
 use Orion\Storage\Identifier;
 use Orion\Storage\Storage;
 use Orion\Support\Assert;
 use Override;
 use Throwable;
 
+use function array_filter;
 use function array_key_exists;
 use function array_keys;
+use function array_map;
 use function array_slice;
+use function array_values;
 use function count;
+use function implode;
+use function in_array;
 use function is_array;
 use function is_bool;
 use function is_numeric;
@@ -30,13 +40,29 @@ use function usort;
  * A {@see Storage} over PHP arrays with the full contract: the criteria grammar (equality, IN, IS NULL,
  * {@see Condition}), ordering, paging, identifier and direction checks, refusal of unbounded updates and deletes,
  * and transactions that restore a snapshot when the callable throws, which makes nested transactions savepoints.
- * Compares as SQL would: numbers numerically whatever their PHP type, dates as instants. Tables need no installing,
- * and primary keys are not enforced.
+ * Compares as SQL would: numbers numerically whatever their PHP type, dates as instants. Tables need no installing;
+ * inserts are checked against the primary and unique keys of the tables it is given (Orion's own by default).
  */
 final class InMemoryStorage implements Storage
 {
     /** @var array<string, list<array<string, mixed>>> */
     private array $tables = [];
+    /** @var array<string, list<list<string>>> table => its primary key and unique indexes, by column */
+    private readonly array $keys;
+
+    /**
+     * @param list<Table> $tables the tables whose keys inserts are checked against: Orion's own by default
+     */
+    public function __construct(array $tables = [])
+    {
+        $keys = [];
+        foreach ($tables === [] ? Schema::tables() : $tables as $table) {
+            $primary = array_map(static fn(Column $column): string => $column->name, $table->primaryKey());
+            $unique = array_map(static fn(Index $index): array => $index->columns, array_values(array_filter($table->indexes, static fn(Index $index): bool => $index->unique)));
+            $keys[$table->name] = $primary === [] ? $unique : [$primary, ...$unique];
+        }
+        $this->keys = $keys;
+    }
 
     #[Override]
     public function findOne(string $table, array $criteria): ?array
@@ -84,6 +110,16 @@ final class InMemoryStorage implements Storage
     public function insert(string $table, array $row): void
     {
         self::assertIdentifiers($table, $row);
+        foreach ($this->keys[$table] ?? [] as $key) {
+            $criteria = [];
+            foreach ($key as $column) {
+                $criteria[$column] = $row[$column] ?? null;
+            }
+            // As in SQL, a key with a NULL in it never collides.
+            if (!in_array(null, $criteria, true) && $this->findOne($table, $criteria) !== null) {
+                throw new DuplicateKey(sprintf('%s already holds a row with that %s.', $table, implode(', ', $key)));
+            }
+        }
         $this->tables[$table][] = $row;
     }
 

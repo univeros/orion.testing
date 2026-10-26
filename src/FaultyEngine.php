@@ -49,6 +49,8 @@ final class FaultyEngine implements SearchAdapter, SchemaAdapter, WriteAdapter
     private array $calls = [];
     /** @var (callable(IndexName, int): void)|null */
     private $onBulk = null;
+    /** @var array<string, callable(): void> verb => what happens just before it, once */
+    private array $hooks = [];
 
     public function __construct(private readonly SearchAdapter&SchemaAdapter&WriteAdapter $inner)
     {
@@ -78,6 +80,17 @@ final class FaultyEngine implements SearchAdapter, SchemaAdapter, WriteAdapter
     public function onBulk(?callable $hook): void
     {
         $this->onBulk = $hook;
+    }
+
+    /**
+     * Runs `$hook` once, just before the next call of the verb reaches the engine: something else happening while
+     * Orion is mid-operation.
+     *
+     * @param callable(): void $hook
+     */
+    public function beforeNext(string $verb, callable $hook): void
+    {
+        $this->hooks[$verb] = $hook;
     }
 
     public function revive(): void
@@ -184,6 +197,11 @@ final class FaultyEngine implements SearchAdapter, SchemaAdapter, WriteAdapter
     private function around(string $verb, callable $call): mixed
     {
         $this->calls[$verb] = ($this->calls[$verb] ?? 0) + 1;
+        if (isset($this->hooks[$verb])) {
+            $hook = $this->hooks[$verb];
+            unset($this->hooks[$verb]);
+            $hook();
+        }
         if (isset($this->before[$verb]) && $this->before[$verb]-- === 0) {
             unset($this->before[$verb]);
 

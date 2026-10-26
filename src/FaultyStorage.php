@@ -21,6 +21,8 @@ final class FaultyStorage implements Storage
     private ?string $killAfterCommit = null;
     private int $depth = 0;
     private bool $wroteWatched = false;
+    /** @var array<string, callable(): void> */
+    private array $hooks = [];
 
     public function __construct(private readonly Storage $inner)
     {
@@ -34,6 +36,16 @@ final class FaultyStorage implements Storage
     public function killAfterCommit(string $table): void
     {
         $this->killAfterCommit = $table;
+    }
+
+    /**
+     * Runs `$hook` once, just before the next write to the table: another process committing in between.
+     *
+     * @param callable(): void $hook
+     */
+    public function beforeNextWrite(string $table, callable $hook): void
+    {
+        $this->hooks[$table] = $hook;
     }
 
     #[Override]
@@ -109,6 +121,11 @@ final class FaultyStorage implements Storage
 
     private function writing(string $table): void
     {
+        if (isset($this->hooks[$table])) {
+            $hook = $this->hooks[$table];
+            unset($this->hooks[$table]);
+            $hook();
+        }
         if ($this->killOnWrite === $table) {
             $this->killOnWrite = null;
 

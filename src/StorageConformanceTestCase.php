@@ -9,6 +9,7 @@ use InvalidArgumentException;
 use LogicException;
 use Orion\Storage\Column;
 use Orion\Storage\Condition;
+use Orion\Storage\DuplicateKey;
 use Orion\IndexName;
 use Orion\Outbox\Entry;
 use Orion\Outbox\EntryKind;
@@ -275,6 +276,29 @@ abstract class StorageConformanceTestCase extends TestCase
 
         self::assertSame('2026-10-26T12:00:00.123456+00:00', $store->find(1)?->toArray()['recorded_at']);
         self::assertSame(['receipts' => 2, 'ok' => true, 'breaks' => []], (new Verifier($store, $signer))->verify()->toArray());
+    }
+
+    public function testInsertingADuplicateKeyThrowsDuplicateKeyAndKeepsTheFirstRow(): void
+    {
+        $this->storage->insert(Schema::COUNTER, ['name' => 'outbox:products', 'value' => 1]);
+        $row = ['index_name' => 'products', 'outbox_offset' => 1, 'document_id' => 'p1', 'operation' => 'delete', 'payload' => null, 'recorded_at' => new DateTimeImmutable('2026-10-26 12:00:00+00:00')];
+        $this->storage->insert(Schema::OUTBOX, $row);
+
+        $duplicates = [
+            fn() => $this->storage->insert(Schema::COUNTER, ['name' => 'outbox:products', 'value' => 9]),
+            fn() => $this->storage->insert(Schema::OUTBOX, [...$row, 'outbox_offset' => 2]),
+        ];
+        foreach ($duplicates as $duplicate) {
+            try {
+                $this->storage->transaction($duplicate);
+                self::fail('A duplicate key was inserted.');
+            } catch (DuplicateKey) {
+                self::addToAssertionCount(1);
+            }
+        }
+
+        self::assertEquals(1, $this->storage->findOne(Schema::COUNTER, ['name' => 'outbox:products'])['value'] ?? null);
+        self::assertSame(1, $this->storage->count(Schema::OUTBOX, []));
     }
 
     public function testFindOneReturnsTheMatchingRowOrNull(): void
