@@ -6,6 +6,7 @@ namespace Orion\Testing;
 
 use DateTimeImmutable;
 use InvalidArgumentException;
+use LogicException;
 use Orion\Storage\Column;
 use Orion\Storage\Condition;
 use Orion\IndexName;
@@ -87,7 +88,7 @@ abstract class StorageConformanceTestCase extends TestCase
         try {
             $this->storage->transaction(function (): void {
                 $this->insertOnHostConnection(self::ENTITY, $this->entity('e1', 'Widget', 1));
-                $this->storage->insert(Schema::OUTBOX, $this->outbox('o1', 1, 'e1'));
+                $this->storage->insert(Schema::OUTBOX, $this->outbox(1, 'e1'));
                 $this->failTheWrite();
             });
         } catch (RuntimeException $exception) {
@@ -104,7 +105,7 @@ abstract class StorageConformanceTestCase extends TestCase
     {
         $result = $this->storage->transaction(function (): string {
             $this->insertOnHostConnection(self::ENTITY, $this->entity('e1', 'Widget', 1));
-            $this->storage->insert(Schema::OUTBOX, $this->outbox('o1', 1, 'e1'));
+            $this->storage->insert(Schema::OUTBOX, $this->outbox(1, 'e1'));
 
             return 'committed';
         });
@@ -120,8 +121,8 @@ abstract class StorageConformanceTestCase extends TestCase
         try {
             $this->inHostTransaction(function (): void {
                 $this->insertOnHostConnection(self::ENTITY, $this->entity('e1', 'Widget', 1));
-                $this->storage->insert(Schema::OUTBOX, $this->outbox('o1', 1, 'e1'));
-                $this->storage->transaction(fn() => $this->storage->insert(Schema::OUTBOX, $this->outbox('o2', 2, 'e1')));
+                $this->storage->insert(Schema::OUTBOX, $this->outbox(1, 'e1'));
+                $this->storage->transaction(fn() => $this->storage->insert(Schema::OUTBOX, $this->outbox(2, 'e2')));
                 $this->failTheWrite();
             });
         } catch (RuntimeException $exception) {
@@ -138,7 +139,7 @@ abstract class StorageConformanceTestCase extends TestCase
     {
         $this->inHostTransaction(function (): void {
             $this->insertOnHostConnection(self::ENTITY, $this->entity('e1', 'Widget', 1));
-            $this->storage->transaction(fn() => $this->storage->insert(Schema::OUTBOX, $this->outbox('o1', 1, 'e1')));
+            $this->storage->transaction(fn() => $this->storage->insert(Schema::OUTBOX, $this->outbox(1, 'e1')));
         });
 
         self::assertSame(1, $this->storage->count(self::ENTITY, []));
@@ -175,6 +176,60 @@ abstract class StorageConformanceTestCase extends TestCase
         self::assertEquals(Canonical::sort($schema->toArray()), Canonical::sort($read->schema->toArray()));
         self::assertSame(1, $read->version);
         self::assertSame('2026-10-26T10:00:00+00:00', $read->createdAt->format(DATE_ATOM));
+    }
+
+    public function testIncrementAddsOneAndReturnsTheNewValue(): void
+    {
+        $this->storage->insert(Schema::COUNTER, ['name' => 'outbox:products', 'value' => 0]);
+        $this->storage->insert(Schema::COUNTER, ['name' => 'outbox:orders', 'value' => 7]);
+
+        self::assertSame(1, $this->storage->increment(Schema::COUNTER, ['name' => 'outbox:products'], 'value'));
+        self::assertSame(2, $this->storage->increment(Schema::COUNTER, ['name' => 'outbox:products'], 'value'));
+        self::assertEquals(2, $this->storage->findOne(Schema::COUNTER, ['name' => 'outbox:products'])['value'] ?? null);
+        self::assertEquals(7, $this->storage->findOne(Schema::COUNTER, ['name' => 'outbox:orders'])['value'] ?? null);
+    }
+
+    public function testIncrementReturnsNullWhenNoRowMatches(): void
+    {
+        self::assertNull($this->storage->increment(Schema::COUNTER, ['name' => 'outbox:missing'], 'value'));
+        self::assertSame(0, $this->storage->count(Schema::COUNTER, []));
+    }
+
+    public function testAnIncrementRollsBackWithItsTransaction(): void
+    {
+        $this->storage->insert(Schema::COUNTER, ['name' => 'outbox:products', 'value' => 3]);
+        try {
+            $this->inHostTransaction(function (): void {
+                self::assertSame(4, $this->storage->increment(Schema::COUNTER, ['name' => 'outbox:products'], 'value'));
+                $this->failTheWrite();
+            });
+        } catch (RuntimeException) {
+        }
+
+        self::assertSame(4, $this->storage->increment(Schema::COUNTER, ['name' => 'outbox:products'], 'value'));
+    }
+
+    public function testIncrementRefusesCriteriaMatchingSeveralRowsAndChangesNothing(): void
+    {
+        $this->seed();
+
+        try {
+            $this->storage->increment(self::ENTITY, ['position' => Condition::lt(3)], 'position');
+            self::fail('An increment of several rows was accepted.');
+        } catch (LogicException) {
+            self::addToAssertionCount(1);
+        }
+
+        self::assertSame(['a', 'b'], $this->ids($this->storage->findMany(self::ENTITY, ['position' => [1, 2]], ['id' => 'asc'])));
+    }
+
+    public function testIncrementRefusesEmptyCriteria(): void
+    {
+        $this->storage->insert(Schema::COUNTER, ['name' => 'outbox:products', 'value' => 0]);
+
+        $this->expectException(InvalidArgumentException::class);
+
+        $this->storage->increment(Schema::COUNTER, [], 'value');
     }
 
     public function testFindOneReturnsTheMatchingRowOrNull(): void
@@ -373,6 +428,8 @@ abstract class StorageConformanceTestCase extends TestCase
         yield 'order direction' => [static fn(Storage $s): array => $s->findMany(self::ENTITY, [], ['id' => 'asc; DROP TABLE x'])];
         yield 'row column' => [static fn(Storage $s) => $s->insert(self::ENTITY, ['id' => 'x', 'name) VALUES (1); --' => 'y'])];
         yield 'update column' => [static fn(Storage $s): int => $s->update(self::ENTITY, ['id' => 'a'], ["name\n" => 'y'])];
+        yield 'increment column' => [static fn(Storage $s): ?int => $s->increment(self::ENTITY, ['id' => 'a'], 'position = 0, name')];
+        yield 'increment table' => [static fn(Storage $s): ?int => $s->increment('orion_counter; --', ['name' => 'a'], 'value')];
         yield 'negative limit' => [static fn(Storage $s): array => $s->findMany(self::ENTITY, [], null, -1)];
         yield 'negative offset' => [static fn(Storage $s): array => $s->findMany(self::ENTITY, [], null, 1, -1)];
     }
@@ -404,10 +461,9 @@ abstract class StorageConformanceTestCase extends TestCase
     /**
      * @return array<string, mixed>
      */
-    private function outbox(string $id, int $offset, string $documentId): array
+    private function outbox(int $offset, string $documentId): array
     {
         return [
-            'id' => $id,
             'outbox_offset' => $offset,
             'index_name' => 'products',
             'document_id' => $documentId,

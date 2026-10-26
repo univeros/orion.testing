@@ -8,6 +8,7 @@ use DateTimeImmutable;
 use DateTimeInterface;
 use DateTimeZone;
 use InvalidArgumentException;
+use LogicException;
 use Orion\Storage\Condition;
 use Orion\Storage\Identifier;
 use Orion\Storage\Storage;
@@ -123,6 +124,29 @@ final class InMemoryStorage implements Storage
     public function count(string $table, array $criteria): int
     {
         return count($this->findMany($table, $criteria));
+    }
+
+    #[Override]
+    public function increment(string $table, array $criteria, string $column): ?int
+    {
+        self::assertBounded('increment', $criteria);
+        self::assertIdentifiers($table, $criteria, [$column => null]);
+        $matched = [];
+        foreach ($this->tables[$table] ?? [] as $index => $row) {
+            if (self::matches($row, $criteria)) {
+                $matched[] = $index;
+            }
+        }
+        if (count($matched) > 1) {
+            throw new LogicException(sprintf('An increment changes one row; %d match.', count($matched)));
+        }
+        if ($matched === []) {
+            return null;
+        }
+        $value = (int) ($this->tables[$table][$matched[0]][$column] ?? 0) + 1;
+        $this->tables[$table][$matched[0]][$column] = $value;
+
+        return $value;
     }
 
     #[Override]
