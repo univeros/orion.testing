@@ -13,11 +13,12 @@ use Orion\Adapter\SearchAdapter;
 use Orion\Adapter\WriteAdapter;
 use Orion\IndexName;
 use Orion\Lifecycle\Operation;
-use Orion\Lifecycle\Outcome;
 use Orion\Lifecycle\Planner;
 use Orion\Orion;
 use Orion\Query\Hit;
 use Orion\Query\Query;
+use Orion\Receipt\Receipt;
+use Orion\Receipt\SodiumSigner;
 use Orion\Registry\EngineRegistry;
 use Orion\Registry\IndexRegistration;
 use Orion\Schema\Field;
@@ -37,17 +38,17 @@ use function sort;
 
 /**
  * The determinism harness for the schema lifecycle (v1 §17, §18.3): plan and apply, run repeatedly from the same
- * starting state with the same inputs, produce identical plans, identical outcomes, identical registry rows and an
- * identical live index. Receipts (WP4) will be signed over exactly the {@see Outcome} this harness compares, so
- * "identical receipts" is the one assertion still to add.
+ * starting state with the same inputs, produce identical plans, identical outcomes, identical registry rows, an
+ * identical live index and identical receipts, and the receipt chain verifies.
  *
- * Every run uses a fresh in-memory storage and a fixed clock, on a fresh alias dropped afterwards.
+ * Every run uses a fresh in-memory storage, a fixed clock and a fixed signing key, on a fresh alias dropped afterwards.
  */
 abstract class LifecycleDeterminismTestCase extends TestCase
 {
     public const string ENGINE = 'engine';
     private const string OTHER_ENGINE = 'other';
     private const string NATIVE_KEY = 'harness';
+    private const string SEED = "\x07\x07\x07\x07\x07\x07\x07\x07\x07\x07\x07\x07\x07\x07\x07\x07\x07\x07\x07\x07\x07\x07\x07\x07\x07\x07\x07\x07\x07\x07\x07\x07";
 
     private SearchAdapter&SchemaAdapter&WriteAdapter $engine;
     private IndexName $alias;
@@ -77,6 +78,9 @@ abstract class LifecycleDeterminismTestCase extends TestCase
         $second = $this->transcript($this->scenario());
 
         self::assertSame($first, $second);
+        self::assertTrue($this->graph->verifier()->verify()->ok());
+        self::assertNotNull($first[0]['outcome']['receipt']);
+        self::assertNull($first[1]['outcome']['receipt'], 'An unchanged apply issues no receipt.');
         self::assertSame(Operation::Created->value, $first[0]['outcome']['operation']);
         self::assertSame(Operation::Unchanged->value, $first[1]['outcome']['operation']);
         self::assertSame(Operation::Applied->value, $first[2]['outcome']['operation']);
@@ -117,7 +121,9 @@ abstract class LifecycleDeterminismTestCase extends TestCase
             'version' => 1,
             'schema_hash' => $this->schema()->hash(),
             'plan' => $outcome->plan->toArray(),
+            'receipt' => $outcome->receipt?->toArray(),
         ], $outcome->toArray());
+        self::assertSame([Operation::Created, null, 1, $this->schema()->hash()], [$outcome->receipt?->operation, $outcome->receipt?->fromVersion, $outcome->receipt?->toVersion, $outcome->receipt?->schemaHash]);
     }
 
     public function testTheAliasTargetReachesTheDocuments(): void
@@ -210,7 +216,8 @@ abstract class LifecycleDeterminismTestCase extends TestCase
 
         $outcome = $this->planner()->apply($boosted);
 
-        self::assertSame(Operation::Unchanged, $outcome->operation);
+        self::assertSame(Operation::Applied, $outcome->operation, 'The registered schema changed, so the apply is receipted.');
+        self::assertSame($boosted->hash(), $outcome->receipt?->schemaHash);
         self::assertTrue($outcome->plan->isEmpty());
         self::assertSame($boosted->hash(), $outcome->registration->schema->hash());
         self::assertSame($boosted->hash(), $this->graph->registry()->find($this->physical(1))?->schema->hash(), 'Queries compile from the registered schema, so the boost must be recorded.');
@@ -308,6 +315,7 @@ abstract class LifecycleDeterminismTestCase extends TestCase
                 'live' => $live === null ? null : Field::mapToArray($live->fields),
                 'registry' => array_map(static fn(IndexRegistration $r): array => [...$r->toRow(), 'created_at' => $r->createdAt->format(DateTimeImmutable::ATOM)], $this->graph->registry()->versions($this->alias)),
                 'alias' => array_map(static fn(mixed $v): mixed => $v instanceof DateTimeImmutable ? $v->format(DateTimeImmutable::ATOM) : $v, $this->graph->storage()->findOne(Schema::ALIAS, ['alias' => $this->alias->value]) ?? []),
+                'receipts' => array_map(static fn(Receipt $r): array => $r->toArray(), $this->graph->receipts()->of($this->alias)),
             ];
         }
 
@@ -327,6 +335,7 @@ abstract class LifecycleDeterminismTestCase extends TestCase
             engines: new EngineRegistry(...[self::ENGINE => $this->engine, self::OTHER_ENGINE => new InMemoryEngine()]),
             tenancy: Tenancy::single(),
             clock: new FixedClock(new DateTimeImmutable('2026-10-26 12:00:00')),
+            receiptSigner: SodiumSigner::fromSeed(self::SEED, self::NATIVE_KEY),
         ))->graph();
     }
 

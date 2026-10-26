@@ -13,6 +13,10 @@ use Orion\IndexName;
 use Orion\Outbox\Entry;
 use Orion\Outbox\EntryKind;
 use Orion\Outbox\Outbox;
+use Orion\Lifecycle\Operation;
+use Orion\Receipt\ReceiptStore;
+use Orion\Receipt\SodiumSigner;
+use Orion\Receipt\Verifier;
 use Orion\Registry\IndexRegistration;
 use Orion\Schema\IndexSchema;
 use Orion\Storage\Schema;
@@ -25,6 +29,7 @@ use RuntimeException;
 
 use function array_column;
 use function array_map;
+use function str_repeat;
 
 /**
  * What every {@see Storage} adapter must do before it is an Orion storage adapter (docs/spec/revision.md §4):
@@ -254,6 +259,22 @@ abstract class StorageConformanceTestCase extends TestCase
         $this->expectException(InvalidArgumentException::class);
 
         $this->storage->increment(Schema::COUNTER, [], 'value');
+    }
+
+    public function testAReceiptChainRoundTripsThroughTheDatabaseAndVerifies(): void
+    {
+        $signer = SodiumSigner::fromSeed(str_repeat("\x05", 32), 'conformance');
+        $schema = IndexSchema::for('products')->text('title', language: 'en')->keyword('sku', filterable: true);
+        $registration = new IndexRegistration(IndexName::of('products_v1'), IndexName::of('products'), 'elasticsearch', 1, $schema, new DateTimeImmutable('2026-10-26 10:00:00+00:00'));
+        // Microseconds are part of the signed message, so the column must keep them; a whole second must survive too.
+        foreach (['2026-10-26 12:00:00.123456+00:00', '2026-10-26 12:00:01+00:00'] as $at) {
+            (new ReceiptStore($this->storage, $signer, new FixedClock(new DateTimeImmutable($at))))->append(Operation::Created, $registration, null, 0, 0, 3);
+        }
+
+        $store = new ReceiptStore($this->storage, null, new FixedClock());
+
+        self::assertSame('2026-10-26T12:00:00.123456+00:00', $store->find(1)?->toArray()['recorded_at']);
+        self::assertSame(['receipts' => 2, 'ok' => true, 'breaks' => []], (new Verifier($store, $signer))->verify()->toArray());
     }
 
     public function testFindOneReturnsTheMatchingRowOrNull(): void
