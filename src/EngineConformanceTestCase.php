@@ -377,6 +377,15 @@ abstract class EngineConformanceTestCase extends TestCase
         self::assertSame([], $this->ids($this->search($this->query()->phrase('title', 'shoe running'))));
     }
 
+    public function testMatchOnAKeywordFindsTheWholeValue(): void
+    {
+        $this->engine->ensure($this->schema());
+        $this->engine->index($this->index, new Document('h', ['title' => 'Hyphenated', 'sku' => 'SKU-123'], 1))->await(self::AWAIT_SECONDS);
+        $this->engine->flush($this->index, await: true);
+
+        self::assertSame(['h'], $this->ids($this->search($this->query()->match('sku', 'SKU-123'))));
+    }
+
     public function testClausesAreConjunctive(): void
     {
         $this->seed();
@@ -402,6 +411,28 @@ abstract class EngineConformanceTestCase extends TestCase
         self::assertSame(['1', '2', '5'], $this->ids($this->search($this->query()->filter(Filter::range('price', gte: 90, lt: 150)))));
         self::assertSame(['4'], $this->ids($this->search($this->query()->filter(Filter::range('stock', gt: 1, lte: 40))->filter(Filter::range('price', lt: 100)))));
         self::assertSame(['3', '4', '5'], $this->ids($this->search($this->query()->filter(Filter::range('released', gte: '2026-03-01')))));
+    }
+
+    public function testFiltersReadValuesAsTheirFieldsDeclareThem(): void
+    {
+        $this->seed();
+
+        self::assertSame(['2'], $this->ids($this->search($this->query()->filter(Filter::term('released', '2026-02-10')))));
+        self::assertSame(['1'], $this->ids($this->search($this->query()->filter(Filter::term('stock', 5.0)))));
+    }
+
+    public function testExistsOnAnObjectFindsDocumentsWithAnyOfItsFields(): void
+    {
+        $this->engine->ensure($this->schema()->object('address', Field::keyword('city', filterable: true), Field::keyword('zip', filterable: true)));
+        $this->engine->index(
+            $this->index,
+            new Document('a', ['title' => 'A', 'address' => ['city' => 'Lisbon']], 1),
+            new Document('b', ['title' => 'B', 'address' => ['zip' => '1000']], 1),
+            new Document('c', ['title' => 'C'], 1),
+        )->await(self::AWAIT_SECONDS);
+        $this->engine->flush($this->index, await: true);
+
+        self::assertSame(['a', 'b'], $this->ids($this->search($this->query()->filter(Filter::exists('address')))));
     }
 
     public function testExistsFilter(): void
@@ -433,6 +464,14 @@ abstract class EngineConformanceTestCase extends TestCase
 
         self::assertSame(['4', '2', '5', '1', '3'], $this->orderedIds($this->search($this->query()->sort('price', Direction::Asc))));
         self::assertSame(['3', '1', '5', '2', '4'], $this->orderedIds($this->search($this->query()->sort('price', Direction::Desc))));
+    }
+
+    public function testDocumentsMissingTheSortFieldComeLastEitherWay(): void
+    {
+        $this->seed();
+
+        self::assertSame(['2', '3', '1', '4', '5'], $this->orderedIds($this->search($this->query()->sort('stock', Direction::Asc))));
+        self::assertSame(['4', '1', '3', '2', '5'], $this->orderedIds($this->search($this->query()->sort('stock', Direction::Desc))));
     }
 
     public function testPaginationSlicesTheSortedResults(): void
@@ -483,6 +522,22 @@ abstract class EngineConformanceTestCase extends TestCase
         self::assertCount(1, $hits);
         self::assertNotEmpty($hits[0]->highlights['title'] ?? []);
         self::assertNotFalse(stripos($hits[0]->highlights['title'][0], 'hiking'));
+    }
+
+    public function testOnlyAFieldThatMatchedIsHighlighted(): void
+    {
+        $this->engine->ensure($this->schema()->text('summary', language: 'en'));
+        $this->engine->index($this->index, new Document('x', ['title' => 'Trail running shoe', 'summary' => 'A shoe for the trail', 'sku' => 'X1'], 1))->await(self::AWAIT_SECONDS);
+        $this->engine->flush($this->index, await: true);
+        $query = $this->query()->match('summary', 'trail')->highlight('title', 'summary');
+        if (!$this->engine->supports(Capability::Highlighting)) {
+            $this->expectException(UnsupportedClause::class);
+        }
+
+        $highlights = $this->search($query)->hits[0]->highlights ?? [];
+
+        self::assertArrayHasKey('summary', $highlights);
+        self::assertArrayNotHasKey('title', $highlights, 'The title holds the word but was not queried.');
     }
 
     public function testHighlightsAreHtmlSafe(): void
