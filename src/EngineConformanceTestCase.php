@@ -304,6 +304,12 @@ abstract class EngineConformanceTestCase extends TestCase
 
         self::assertSame([], $result->failures());
         self::assertSame([], $this->ids($this->search($this->query()->match('title', 'boot'))));
+        // Nothing of a deleted document stays findable, whatever an engine keeps to version its deletes.
+        $everything = $this->search($this->query());
+        self::assertSame(['1', '2', '4', '5'], $this->ids($everything));
+        self::assertSame(4, $everything->total);
+        self::assertSame(['1', '2', '4', '5'], $this->ids($this->engine->raw($this->index, $this->nativeMatchAll())));
+        self::assertSame(['1', '2', '4', '5'], $this->ids($this->search($this->query()->filter(Filter::bool(mustNot: [Filter::term('brand', 'nobody')])))));
     }
 
     public function testVersionStampedWritesConvergeWhateverTheArrivalOrder(): void
