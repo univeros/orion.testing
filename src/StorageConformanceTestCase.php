@@ -4,6 +4,11 @@ declare(strict_types=1);
 
 namespace Orion\Testing;
 
+use Orion\Wiring\Config;
+use Orion\Tenancy\Tenancy;
+use Orion\Registry\EngineRegistry;
+use Orion\Orion;
+use Orion\Adapter\InMemory\InMemoryEngine;
 use DateTimeImmutable;
 use InvalidArgumentException;
 use LogicException;
@@ -530,7 +535,7 @@ abstract class StorageConformanceTestCase extends TestCase
 
     private function outbox(): Outbox
     {
-        return new Outbox($this->storage, new FixedClock(new DateTimeImmutable('2026-10-26 12:00:00+00:00')));
+        return Orion::create(new Config(storage: $this->storage, engines: new EngineRegistry(memory: new InMemoryEngine()), tenancy: Tenancy::single(), clock: new FixedClock(new DateTimeImmutable('2026-10-26 12:00:00+00:00'))))->graph()->outbox();
     }
 
     /**

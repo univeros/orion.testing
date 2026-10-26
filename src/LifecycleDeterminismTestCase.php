@@ -27,6 +27,8 @@ use Orion\Schema\MigrationPlan;
 use Orion\Storage\Schema;
 use Orion\Storage\Storage;
 use Orion\Tenancy\Tenancy;
+use Orion\Tenancy\TenantResolver;
+use Orion\Tenancy\TenantScope;
 use Orion\Wiring\Config;
 use Orion\Wiring\Graph;
 use Orion\Write\Document;
@@ -198,6 +200,13 @@ abstract class LifecycleDeterminismTestCase extends TestCase
 
     public function testWhatTheEngineCannotReportIsDiffedAgainstTheRegistration(): void
     {
+        // An org key is declared only where tenants are resolved.
+        $this->graph = $this->freshGraph(Tenancy::resolvedBy(new class implements TenantResolver {
+            public function resolve(): TenantScope
+            {
+                return new TenantScope('harness');
+            }
+        }));
         $registered = $this->schema()->orgKey('org_id')->native(self::NATIVE_KEY, ['shards' => 1]);
         $this->planner()->apply($registered);
 
@@ -210,11 +219,14 @@ abstract class LifecycleDeterminismTestCase extends TestCase
         self::assertSame([MigrationPlan::ORG_KEY], $this->paths($orgKey->plan->breaking()));
         self::assertSame(['tenant'], $this->paths($orgKey->plan->additive()));
         $removedNative = $this->planner()->apply($this->schema()->orgKey('org_id'));
-        $removedOrgKey = $this->planner()->apply($this->schema()->keyword('org_id', filterable: true)->native(self::NATIVE_KEY, ['shards' => 1]));
         self::assertSame(Operation::ReindexRequired, $removedNative->operation);
         self::assertSame([MigrationPlan::NATIVE . '.' . self::NATIVE_KEY], $this->paths($removedNative->plan->breaking()));
-        self::assertSame(Operation::ReindexRequired, $removedOrgKey->operation);
-        self::assertSame([MigrationPlan::ORG_KEY], $this->paths($removedOrgKey->plan->breaking()));
+        try {
+            $this->planner()->apply($this->schema()->keyword('org_id', filterable: true)->native(self::NATIVE_KEY, ['shards' => 1]));
+            self::fail('A resolved tenancy let an index drop its org key.');
+        } catch (LogicException $refused) {
+            self::assertStringContainsString('org key', $refused->getMessage());
+        }
         self::assertSame($registered->hash(), $this->graph->registry()->find($this->physical(1))?->schema->hash());
         self::assertTrue($this->planner()->plan($registered)->isEmpty());
     }
@@ -406,12 +418,12 @@ abstract class LifecycleDeterminismTestCase extends TestCase
         }
     }
 
-    private function freshGraph(): Graph
+    private function freshGraph(?Tenancy $tenancy = null): Graph
     {
         return Orion::create(new Config(
             storage: $this->createStorage(),
             engines: new EngineRegistry(...[self::ENGINE => $this->engine, self::OTHER_ENGINE => new InMemoryEngine()]),
-            tenancy: Tenancy::single(),
+            tenancy: $tenancy ?? Tenancy::single(),
             clock: $this->clock = new SettableClock(new DateTimeImmutable('2026-10-26 12:00:00+00:00')),
             receiptSigner: SodiumSigner::fromSeed(self::SEED, self::NATIVE_KEY),
         ))->graph();
