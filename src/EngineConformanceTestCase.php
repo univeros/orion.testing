@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace Orion\Testing;
 
 use InvalidArgumentException;
-use LogicException;
 use Orion\Adapter\Capability;
+use Orion\Adapter\RequiresReindex;
 use Orion\Adapter\SchemaAdapter;
 use Orion\Adapter\SearchAdapter;
 use Orion\Adapter\UnsupportedClause;
@@ -37,7 +37,8 @@ use function stripos;
 /**
  * What every engine adapter must do before it ships (v1 §18.1): schema create, inspect, plan and in-place apply
  * without false drift; version-stamped writes and deletes that converge; the neutral query AST with portable
- * semantics; the scoped escape hatch; and an honest {@see UnsupportedClause} for every capability it reports false.
+ * semantics; the scoped escape hatch; an honest {@see UnsupportedClause} for every capability it reports false; and
+ * {@see RequiresReindex}, never a silent partial change, for a plan it cannot apply in place.
  *
  * Only portable behaviour is asserted. Without an explicit sort, hits are compared as sets: ranking is the engine's
  * and is not deterministic (v1 §17). Every test runs on a fresh index, dropped afterwards.
@@ -157,7 +158,7 @@ abstract class EngineConformanceTestCase extends TestCase
         try {
             $this->engine->apply($this->engine->plan($desired))->await(self::AWAIT_SECONDS);
             self::assertTrue($this->engine->plan($desired)->isEmpty());
-        } catch (LogicException) {
+        } catch (RequiresReindex) {
             self::assertFalse($this->engine->plan($desired)->isEmpty(), 'A refused plan must leave the index unchanged.');
         }
     }
@@ -167,7 +168,7 @@ abstract class EngineConformanceTestCase extends TestCase
         $this->engine->ensure($this->schema());
         $plan = $this->engine->plan(IndexSchema::for($this->index->value)->text('sku'));
 
-        $this->expectException(LogicException::class);
+        $this->expectException(RequiresReindex::class);
 
         $this->engine->apply($plan);
     }

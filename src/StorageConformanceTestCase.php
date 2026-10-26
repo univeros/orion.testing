@@ -8,9 +8,13 @@ use DateTimeImmutable;
 use InvalidArgumentException;
 use Orion\Storage\Column;
 use Orion\Storage\Condition;
+use Orion\IndexName;
+use Orion\Registry\IndexRegistration;
+use Orion\Schema\IndexSchema;
 use Orion\Storage\Schema;
 use Orion\Storage\Storage;
 use Orion\Storage\Table;
+use Orion\Support\Canonical;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
@@ -156,6 +160,21 @@ abstract class StorageConformanceTestCase extends TestCase
         });
 
         self::assertSame(['outer'], $this->ids($this->storage->findMany(self::ENTITY, [])));
+    }
+
+    public function testARegistryRowRoundTripsThroughTheDatabase(): void
+    {
+        $schema = IndexSchema::for('products')->text('title', language: 'en', boost: 2.0)->keyword('sku', filterable: true)->orgKey('org_id')->native('elasticsearch', ['settings' => ['index' => ['refresh_interval' => '1s', 'number_of_shards' => 1]]]);
+        $registration = new IndexRegistration(IndexName::of('products_v1'), IndexName::of('products'), 'elasticsearch', 1, $schema, new DateTimeImmutable('2026-10-26 10:00:00'));
+
+        $this->storage->insert(Schema::INDEX, $registration->toRow());
+        $read = IndexRegistration::fromRow($this->storage->findOne(Schema::INDEX, ['name' => 'products_v1']) ?? []);
+
+        // A JSON column may reorder keys and renumber; the declaration and its hash must survive it.
+        self::assertSame($schema->hash(), $read->schema->hash());
+        self::assertEquals(Canonical::sort($schema->toArray()), Canonical::sort($read->schema->toArray()));
+        self::assertSame(1, $read->version);
+        self::assertSame('2026-10-26T10:00:00+00:00', $read->createdAt->format(DATE_ATOM));
     }
 
     public function testFindOneReturnsTheMatchingRowOrNull(): void

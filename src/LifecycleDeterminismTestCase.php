@@ -6,6 +6,7 @@ namespace Orion\Testing;
 
 use DateTimeImmutable;
 use LogicException;
+use Orion\Adapter\Capability;
 use Orion\Adapter\InMemory\InMemoryEngine;
 use Orion\Adapter\SchemaAdapter;
 use Orion\Adapter\SearchAdapter;
@@ -92,7 +93,7 @@ abstract class LifecycleDeterminismTestCase extends TestCase
         self::assertTrue($outcome->plan->isEmpty());
         self::assertTrue($this->planner()->plan($this->schema())->isEmpty());
         self::assertCount(1, $this->graph->registry()->versions($this->alias));
-        self::assertSame($this->physical(1)->value, $this->graph->aliases()->current($this->alias)?->value);
+        self::assertSame($this->physical(1)->value, $this->graph->aliases()->current($this->alias)?->physical->value);
     }
 
     public function testCreatingAnIndexRegistersVersionOneBehindTheAlias(): void
@@ -106,6 +107,9 @@ abstract class LifecycleDeterminismTestCase extends TestCase
         self::assertSame(['sku', 'title'], $this->paths($outcome->plan->additive()));
         self::assertNotNull($this->engine->inspect($this->physical(1)));
         self::assertTrue(MigrationPlan::between($this->schema(), $this->engine->inspect($this->physical(1)))->isEmpty());
+        if ($this->engine->supports(Capability::NativeAliases)) {
+            self::assertTrue(MigrationPlan::between($this->schema(), $this->engine->inspect($this->alias))->isEmpty(), 'The engine resolves the alias to version 1.');
+        }
         self::assertSame([
             'operation' => 'created',
             'index' => $this->alias->value,
@@ -171,8 +175,63 @@ abstract class LifecycleDeterminismTestCase extends TestCase
         self::assertSame(Operation::ReindexRequired, $orgKey->operation);
         self::assertSame([MigrationPlan::ORG_KEY], $this->paths($orgKey->plan->breaking()));
         self::assertSame(['tenant'], $this->paths($orgKey->plan->additive()));
+        $removedNative = $this->planner()->apply($this->schema()->orgKey('org_id'));
+        $removedOrgKey = $this->planner()->apply($this->schema()->keyword('org_id', filterable: true)->native(self::NATIVE_KEY, ['shards' => 1]));
+        self::assertSame(Operation::ReindexRequired, $removedNative->operation);
+        self::assertSame([MigrationPlan::NATIVE . '.' . self::NATIVE_KEY], $this->paths($removedNative->plan->breaking()));
+        self::assertSame(Operation::ReindexRequired, $removedOrgKey->operation);
+        self::assertSame([MigrationPlan::ORG_KEY], $this->paths($removedOrgKey->plan->breaking()));
         self::assertSame($registered->hash(), $this->graph->registry()->find($this->physical(1))?->schema->hash());
         self::assertTrue($this->planner()->plan($registered)->isEmpty());
+    }
+
+    public function testAnAliasRowThatDisagreesWithTheRegistryFailsClosed(): void
+    {
+        $this->planner()->apply($this->schema());
+        $this->graph->storage()->update(Schema::ALIAS, ['alias' => $this->alias->value], ['engine' => 'other']);
+
+        $this->expectException(LogicException::class);
+        $this->expectExceptionMessage($this->physical(1)->value);
+
+        $this->planner()->plan($this->schema());
+    }
+
+    public function testAnAliasNameShapedLikeAPhysicalIndexIsRefused(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+
+        $this->planner()->apply(IndexSchema::for($this->alias->value . '_v1')->keyword('sku'));
+    }
+
+    public function testAQueryTimeChangeRefreshesTheRegistrationWithoutTouchingTheIndex(): void
+    {
+        $this->planner()->apply($this->schema());
+        $boosted = IndexSchema::for($this->alias->value)->text('title', language: 'en', boost: 3.0)->keyword('sku', filterable: true);
+
+        $outcome = $this->planner()->apply($boosted);
+
+        self::assertSame(Operation::Unchanged, $outcome->operation);
+        self::assertTrue($outcome->plan->isEmpty());
+        self::assertSame($boosted->hash(), $outcome->registration->schema->hash());
+        self::assertSame($boosted->hash(), $this->graph->registry()->find($this->physical(1))?->schema->hash(), 'Queries compile from the registered schema, so the boost must be recorded.');
+        self::assertSame(Operation::Unchanged, $this->planner()->apply($boosted)->operation);
+    }
+
+    public function testARegisteredIndexMissingFromTheEngineFailsClosed(): void
+    {
+        $this->planner()->apply($this->schema());
+        $this->engine->drop($this->physical(1));
+
+        try {
+            $this->planner()->plan($this->schema());
+            self::fail('A missing physical index was planned as a create.');
+        } catch (LogicException $e) {
+            self::assertStringContainsString($this->physical(1)->value, $e->getMessage());
+        }
+
+        $this->expectException(LogicException::class);
+
+        $this->planner()->apply($this->schema());
     }
 
     public function testAnIndexBelongsToTheEngineThatBuiltIt(): void
@@ -195,7 +254,7 @@ abstract class LifecycleDeterminismTestCase extends TestCase
         } catch (LogicException $e) {
             self::assertStringContainsString($this->physical(1)->value, $e->getMessage());
             self::assertNull($this->graph->aliases()->current($this->alias));
-            self::assertSame([], $this->graph->registry()->versions($this->alias));
+            self::assertSame([], $this->graph->registry()->versions($this->alias), 'Nothing was claimed.');
         }
     }
 
@@ -248,7 +307,7 @@ abstract class LifecycleDeterminismTestCase extends TestCase
                 'outcome' => $outcome->toArray(),
                 'live' => $live === null ? null : Field::mapToArray($live->fields),
                 'registry' => array_map(static fn(IndexRegistration $r): array => [...$r->toRow(), 'created_at' => $r->createdAt->format(DateTimeImmutable::ATOM)], $this->graph->registry()->versions($this->alias)),
-                'alias' => $this->graph->aliases()->current($this->alias)?->value,
+                'alias' => array_map(static fn(mixed $v): mixed => $v instanceof DateTimeImmutable ? $v->format(DateTimeImmutable::ATOM) : $v, $this->graph->storage()->findOne(Schema::ALIAS, ['alias' => $this->alias->value]) ?? []),
             ];
         }
 
@@ -290,7 +349,7 @@ abstract class LifecycleDeterminismTestCase extends TestCase
     {
         self::assertTrue(MigrationPlan::between($this->schema(), $this->engine->inspect($this->physical(1)))->isEmpty(), 'The live index changed.');
         self::assertSame($this->schema()->hash(), $this->graph->registry()->find($this->physical(1))?->schema->hash(), 'The registration changed.');
-        self::assertSame($this->physical(1)->value, $this->graph->aliases()->current($this->alias)?->value, 'The alias moved.');
+        self::assertSame($this->physical(1)->value, $this->graph->aliases()->current($this->alias)?->physical->value, 'The alias moved.');
         self::assertSame(1, $this->graph->storage()->count(Schema::INDEX, ['alias' => $this->alias->value]));
     }
 
