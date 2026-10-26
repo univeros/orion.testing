@@ -275,7 +275,8 @@ abstract class StorageConformanceTestCase extends TestCase
         $store = new ReceiptStore($this->storage, null, new FixedClock());
 
         self::assertSame('2026-10-26T12:00:00.123456+00:00', $store->find(1)?->toArray()['recorded_at']);
-        self::assertSame(['receipts' => 2, 'ok' => true, 'breaks' => []], (new Verifier($store, $signer))->verify()->toArray());
+        $verification = (new Verifier($store, $signer))->verify();
+        self::assertSame([2, []], [$verification->receipts, $verification->breaks]);
     }
 
     public function testInsertingADuplicateKeyThrowsDuplicateKeyAndKeepsTheFirstRow(): void

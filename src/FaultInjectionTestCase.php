@@ -176,7 +176,8 @@ abstract class FaultInjectionTestCase extends TestCase
 
         self::assertSame(['d2' => 'S2', 'd4' => 'S4', 'd5' => 'S5', 'd6' => 'S6', 'd7' => 'S7'], $documents);
         self::assertLessThanOrEqual(1, $this->storage->count(Schema::RECEIPT, ['operation' => 'reindexed']));
-        self::assertSame(['receipts' => $this->graph->receipts()->head(), 'ok' => true, 'breaks' => []], $this->graph->verifier()->verify()->toArray());
+        $verification = $this->graph->verifier()->verify();
+        self::assertSame([$this->graph->receipts()->head(), []], [$verification->receipts, $verification->breaks]);
         self::assertSame(0, $this->graph->deadLetters()->count($this->alias));
         self::assertSame(0, $this->graph->drain()->status($this->alias)->lag);
     }
