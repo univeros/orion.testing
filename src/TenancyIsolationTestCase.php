@@ -75,6 +75,19 @@ abstract class TenancyIsolationTestCase extends TestCase
         return [];
     }
 
+    /**
+     * Native queries that gather candidates before any scope would apply (a k-NN query anywhere in the body, aimed
+     * at the foreign tenant's nearest vector), by name. Scoped, each must still return one of the tenant's own
+     * documents: were the candidates gathered across the scope, whether an own document came back would tell where
+     * the other tenants' vectors lie.
+     *
+     * @return array<string, callable>
+     */
+    protected function nativeProbes(): array
+    {
+        return [];
+    }
+
     protected function createStorage(): Storage
     {
         return new InMemoryStorage();
@@ -155,6 +168,17 @@ abstract class TenancyIsolationTestCase extends TestCase
             $this->assertOnlyAcme($this->graph->searcher()->raw($this->alias, $native), 'native ' . $name);
         }
         self::assertSame(['p1', 'p2', 'p3'], $this->ids($this->graph->searcher()->raw($this->alias, $this->nativeMatchAll())));
+    }
+
+    public function testTheEscapeHatchGathersWithinTheScope(): void
+    {
+        foreach ($this->nativeProbes() as $name => $native) {
+            $results = $this->graph->searcher()->raw($this->alias, $native);
+
+            self::assertNotSame([], $results->hits, 'native ' . $name . ' found none of the tenant\'s documents: it gathered across the scope.');
+            $this->assertOnlyAcme($results, 'native ' . $name);
+        }
+        self::addToAssertionCount(1);
     }
 
     public function testAnEscapeHatchReadingAcrossTheIndexIsRefused(): void
