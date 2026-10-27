@@ -21,6 +21,7 @@ use Orion\Wiring\Config;
 use Orion\Wiring\Graph;
 use PHPUnit\Framework\TestCase;
 
+use function abs;
 use function array_diff;
 use function array_map;
 use function array_values;
@@ -117,6 +118,8 @@ abstract class QueryEquivalenceTestCase extends TestCase
     /**
      * The approximate promise: as many hits as the exact oracle finds, each among the oracle's `k + SLACK` nearest
      * (and, under fusion, the lexical leg's matches); the lexical legs are exact, so the union can differ only there.
+     * Under fusion the count itself may differ by up to `SLACK`: an approximate neighbour may coincide with a lexical
+     * match where the exact one did not, or the other way round, and the union shrinks or grows by it.
      */
     private function assertNearest(Query $query, ResultSet $expected, ResultSet $actual, string $label): void
     {
@@ -127,7 +130,11 @@ abstract class QueryEquivalenceTestCase extends TestCase
         $beyond = array_diff(self::ids($actual, $query), $allowed);
 
         self::assertSame([], array_values($beyond), $label . sprintf("\n(hits beyond the oracle's %d nearest)", $vector->k + static::SLACK));
-        self::assertSame(count($expected->hits), count($actual->hits), $label . "\n(hit count)");
+        if ($query->clauses === []) {
+            self::assertSame(count($expected->hits), count($actual->hits), $label . "\n(hit count)");
+        } else {
+            self::assertLessThanOrEqual(static::SLACK, abs(count($expected->hits) - count($actual->hits)), $label . "\n(hit count under fusion)");
+        }
     }
 
     /**
