@@ -39,6 +39,7 @@ final class FaultyEngine implements SearchAdapter, SchemaAdapter, WriteAdapter
     public const string ENSURE = 'ensure';
     public const string APPLY = 'apply';
     public const string DROP = 'drop';
+    public const string SEARCH = 'search';
 
     /** @var array<string, int> verb => calls to let through before dying */
     private array $before = [];
@@ -114,7 +115,7 @@ final class FaultyEngine implements SearchAdapter, SchemaAdapter, WriteAdapter
     #[Override]
     public function search(IndexName $index, Query $query): ResultSet
     {
-        return $this->inner->search($index, $query);
+        return $this->around(self::SEARCH, fn(): ResultSet => $this->inner->search($index, $query));
     }
 
     #[Override]

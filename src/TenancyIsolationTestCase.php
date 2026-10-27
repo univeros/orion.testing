@@ -11,6 +11,7 @@ use Orion\Adapter\WriteAdapter;
 use Orion\IndexName;
 use Orion\Orion;
 use Orion\Query\Filter;
+use Orion\Query\Fusion;
 use Orion\Query\Hit;
 use Orion\Query\Query;
 use Orion\Query\ResultSet;
@@ -123,6 +124,9 @@ abstract class TenancyIsolationTestCase extends TestCase
             // Every foreign document is nearer: a tenant filter applied after the top k would leave nothing.
             'the k nearest are all foreign' => [$this->query()->vector('embedding', [0.0, 1.0, 0.2], 2), ['p2', 'p3']],
             'nearest, filtered to the foreign tenant' => [$this->query()->vector('embedding', [0.0, 1.0, 0.0], 10)->filter(Filter::term(self::ORG_KEY, self::GLOBEX)), []],
+            // Core fusion: each leg carries the scope, so neither ranking ever sees a foreign document.
+            'hybrid' => [$this->query()->match('title', 'running')->vector('embedding', [0.0, 1.0, 0.0], 10), $all],
+            'hybrid with the k nearest all foreign' => [$this->query()->match('title', 'boot')->vector('embedding', [0.0, 1.0, 0.2], 2)->fuse(Fusion::reciprocalRank()), ['p2', 'p3']],
         ];
 
         foreach ($queries as $name => [$query, $expected]) {

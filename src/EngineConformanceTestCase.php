@@ -18,6 +18,7 @@ use Orion\Query\Fusion;
 use Orion\Query\Hit;
 use Orion\Query\Query;
 use Orion\Query\ResultSet;
+use Orion\Query\Sort;
 use Orion\Schema\Field;
 use Orion\Schema\IndexSchema;
 use Orion\Schema\MigrationPlan;
@@ -386,6 +387,14 @@ abstract class EngineConformanceTestCase extends TestCase
         self::assertSame(['h'], $this->ids($this->search($this->query()->match('sku', 'SKU-123'))));
     }
 
+    public function testAMatchOverSeveralFieldsFindsAHitInAnyOfThem(): void
+    {
+        $this->seed();
+
+        self::assertSame(['5'], $this->ids($this->search($this->query()->match(['title', 'sku'], 'E5'))));
+        self::assertSame(['1', '2', '4'], $this->ids($this->search($this->query()->match(['sku' => 2.0, 'title' => 1.0], 'running'))));
+    }
+
     public function testClausesAreConjunctive(): void
     {
         $this->seed();
@@ -466,6 +475,14 @@ abstract class EngineConformanceTestCase extends TestCase
         self::assertSame(['3', '1', '5', '2', '4'], $this->orderedIds($this->search($this->query()->sort('price', Direction::Desc))));
     }
 
+    public function testRelevanceIsASortFieldOnEveryEngine(): void
+    {
+        $this->seed();
+
+        self::assertSame(['1', '2', '4'], $this->ids($this->search($this->query()->match('title', 'running')->sort(Sort::SCORE, Direction::Desc)->sort('sku'))));
+        self::assertSame(['3', '1', '5', '2', '4'], $this->orderedIds($this->search($this->query()->sort('price', Direction::Desc)->sort(Sort::SCORE, Direction::Desc)->sort('sku'))));
+    }
+
     public function testDocumentsMissingTheSortFieldComeLastEitherWay(): void
     {
         $this->seed();
@@ -494,6 +511,10 @@ abstract class EngineConformanceTestCase extends TestCase
         self::assertCount(1, $hits);
         self::assertSame('Leather hiking boot', $hits[0]->source['title']);
         self::assertSame('acme', $hits[0]->source['brand']);
+        self::assertSame(150.0, (float) $hits[0]->source['price']);
+        // Elasticsearch leaves vectors out of the source; every engine does, so a hit is the same everywhere.
+        self::assertArrayNotHasKey('embedding', $hits[0]->source);
+        self::assertArrayNotHasKey('embedding', $this->engine->raw($this->index, $this->nativeMatchAll())->hits[0]->source);
     }
 
     public function testFacetsCountValuesWithinTheFilteredHits(): void
