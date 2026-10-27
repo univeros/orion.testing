@@ -1,0 +1,341 @@
+[
+    {
+        "request": {
+            "method": "GET",
+            "path": "/products/search",
+            "query": {
+                "filter": {
+                    "brand": "Shared"
+                },
+                "sort": "-sku",
+                "size": "1"
+            },
+            "headers": {
+                "X-User": "u1",
+                "X-Tenant": "acme"
+            }
+        },
+        "response": {
+            "status": 200,
+            "headers": {
+                "Cache-Control": [
+                    "private, no-store"
+                ],
+                "X-Content-Type-Options": [
+                    "nosniff"
+                ],
+                "Content-Type": [
+                    "application/json"
+                ]
+            },
+            "body": {
+                "hits": [
+                    {
+                        "id": "p3",
+                        "score": 1,
+                        "source": {
+                            "title": "Acme hiking boot",
+                            "brand": "Shared",
+                            "sku": "A-3",
+                            "stock": 0,
+                            "org_id": "acme"
+                        },
+                        "highlights": []
+                    }
+                ],
+                "total": 2,
+                "total_is_estimate": false,
+                "facets": {
+                    "brand": {
+                        "Shared": 2
+                    }
+                },
+                "took_ms": 0.023541,
+                "page": 1,
+                "size": 1
+            }
+        },
+        "ordered": true
+    },
+    {
+        "request": {
+            "method": "GET",
+            "path": "/products/search",
+            "query": {
+                "filter": {
+                    "brand": "Shared"
+                },
+                "sort": "-sku",
+                "size": "1",
+                "page": "2"
+            },
+            "headers": {
+                "X-User": "u1",
+                "X-Tenant": "acme"
+            }
+        },
+        "response": {
+            "status": 200,
+            "headers": {
+                "Cache-Control": [
+                    "private, no-store"
+                ],
+                "X-Content-Type-Options": [
+                    "nosniff"
+                ],
+                "Content-Type": [
+                    "application/json"
+                ]
+            },
+            "body": {
+                "hits": [
+                    {
+                        "id": "p2",
+                        "score": 1,
+                        "source": {
+                            "title": "Acme road running shoe",
+                            "brand": "Shared",
+                            "sku": "A-2",
+                            "stock": 5,
+                            "org_id": "acme"
+                        },
+                        "highlights": []
+                    }
+                ],
+                "total": 2,
+                "total_is_estimate": false,
+                "facets": {
+                    "brand": {
+                        "Shared": 2
+                    }
+                },
+                "took_ms": 0.013208,
+                "page": 2,
+                "size": 1
+            }
+        },
+        "ordered": true
+    },
+    {
+        "request": {
+            "method": "GET",
+            "path": "/products/search",
+            "query": {
+                "filter": {
+                    "brand": [
+                        "AcmeOnly",
+                        "GlobexOnly"
+                    ]
+                },
+                "sort": "sku"
+            },
+            "headers": {
+                "X-User": "u1",
+                "X-Tenant": "acme"
+            }
+        },
+        "response": {
+            "status": 200,
+            "headers": {
+                "Cache-Control": [
+                    "private, no-store"
+                ],
+                "X-Content-Type-Options": [
+                    "nosniff"
+                ],
+                "Content-Type": [
+                    "application/json"
+                ]
+            },
+            "body": {
+                "hits": [
+                    {
+                        "id": "p1",
+                        "score": 1,
+                        "source": {
+                            "title": "Acme trail running shoe",
+                            "brand": "AcmeOnly",
+                            "sku": "A-1",
+                            "stock": 3,
+                            "org_id": "acme"
+                        },
+                        "highlights": []
+                    }
+                ],
+                "total": 1,
+                "total_is_estimate": false,
+                "facets": {
+                    "brand": {
+                        "AcmeOnly": 1
+                    }
+                },
+                "took_ms": 0.015125,
+                "page": 1,
+                "size": 10
+            }
+        },
+        "ordered": true
+    },
+    {
+        "request": {
+            "method": "GET",
+            "path": "/products/search",
+            "query": {
+                "filter": {
+                    "stock": {
+                        "gte": "1",
+                        "lt": "5"
+                    }
+                },
+                "sort": "stock,_score"
+            },
+            "headers": {
+                "X-User": "u1",
+                "X-Tenant": "acme"
+            }
+        },
+        "response": {
+            "status": 200,
+            "headers": {
+                "Cache-Control": [
+                    "private, no-store"
+                ],
+                "X-Content-Type-Options": [
+                    "nosniff"
+                ],
+                "Content-Type": [
+                    "application/json"
+                ]
+            },
+            "body": {
+                "hits": [
+                    {
+                        "id": "p1",
+                        "score": 1,
+                        "source": {
+                            "title": "Acme trail running shoe",
+                            "brand": "AcmeOnly",
+                            "sku": "A-1",
+                            "stock": 3,
+                            "org_id": "acme"
+                        },
+                        "highlights": []
+                    }
+                ],
+                "total": 1,
+                "total_is_estimate": false,
+                "facets": {
+                    "brand": {
+                        "AcmeOnly": 1
+                    }
+                },
+                "took_ms": 0.019709,
+                "page": 1,
+                "size": 10
+            }
+        },
+        "ordered": true
+    },
+    {
+        "request": {
+            "method": "GET",
+            "path": "/products/search",
+            "query": {
+                "filter": {
+                    "sku": "G-1"
+                }
+            },
+            "headers": {
+                "X-User": "u1",
+                "X-Tenant": "acme"
+            }
+        },
+        "response": {
+            "status": 200,
+            "headers": {
+                "Cache-Control": [
+                    "private, no-store"
+                ],
+                "X-Content-Type-Options": [
+                    "nosniff"
+                ],
+                "Content-Type": [
+                    "application/json"
+                ]
+            },
+            "body": {
+                "hits": [],
+                "total": 0,
+                "total_is_estimate": false,
+                "facets": {
+                    "brand": []
+                },
+                "took_ms": 0.008292,
+                "page": 1,
+                "size": 10
+            }
+        },
+        "ordered": false
+    },
+    {
+        "request": {
+            "method": "GET",
+            "path": "/products/search",
+            "query": {
+                "q": "shoe",
+                "filter": {
+                    "stock": "5"
+                }
+            },
+            "headers": {
+                "X-User": "u1",
+                "X-Tenant": "acme"
+            }
+        },
+        "response": {
+            "status": 200,
+            "headers": {
+                "Cache-Control": [
+                    "private, no-store"
+                ],
+                "X-Content-Type-Options": [
+                    "nosniff"
+                ],
+                "Content-Type": [
+                    "application/json"
+                ]
+            },
+            "body": {
+                "hits": [
+                    {
+                        "id": "p2",
+                        "score": 2,
+                        "source": {
+                            "title": "Acme road running shoe",
+                            "brand": "Shared",
+                            "sku": "A-2",
+                            "stock": 5,
+                            "org_id": "acme"
+                        },
+                        "highlights": {
+                            "title": [
+                                "Acme road running <em>shoe</em>"
+                            ]
+                        }
+                    }
+                ],
+                "total": 1,
+                "total_is_estimate": false,
+                "facets": {
+                    "brand": {
+                        "Shared": 1
+                    }
+                },
+                "took_ms": 0.019666,
+                "page": 1,
+                "size": 10
+            }
+        },
+        "ordered": false
+    }
+]

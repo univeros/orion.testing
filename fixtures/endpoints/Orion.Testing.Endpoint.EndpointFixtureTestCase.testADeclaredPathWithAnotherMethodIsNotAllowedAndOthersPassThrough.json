@@ -1,0 +1,93 @@
+[
+    {
+        "request": {
+            "method": "GET",
+            "path": "/items/search",
+            "headers": {
+                "X-User": "u1",
+                "X-Tenant": "acme"
+            }
+        },
+        "response": {
+            "status": 405,
+            "headers": {
+                "Cache-Control": [
+                    "private, no-store"
+                ],
+                "X-Content-Type-Options": [
+                    "nosniff"
+                ],
+                "Content-Type": [
+                    "application/problem+json"
+                ],
+                "Allow": [
+                    "POST"
+                ]
+            },
+            "body": {
+                "type": "https://orion-search.dev/problems/method-not-allowed",
+                "title": "Method not allowed",
+                "status": 405,
+                "detail": "This endpoint is served by POST."
+            }
+        },
+        "ordered": false
+    },
+    {
+        "request": {
+            "method": "POST",
+            "path": "/products/search",
+            "body": [],
+            "headers": {
+                "X-User": "u1",
+                "X-Tenant": "acme"
+            }
+        },
+        "response": {
+            "status": 405,
+            "headers": {
+                "Cache-Control": [
+                    "private, no-store"
+                ],
+                "X-Content-Type-Options": [
+                    "nosniff"
+                ],
+                "Content-Type": [
+                    "application/problem+json"
+                ],
+                "Allow": [
+                    "GET"
+                ]
+            },
+            "body": {
+                "type": "https://orion-search.dev/problems/method-not-allowed",
+                "title": "Method not allowed",
+                "status": 405,
+                "detail": "This endpoint is served by GET."
+            }
+        },
+        "ordered": false
+    },
+    {
+        "request": {
+            "method": "GET",
+            "path": "/products",
+            "headers": {
+                "X-User": "u1",
+                "X-Tenant": "acme"
+            }
+        },
+        "response": {
+            "status": 404,
+            "headers": {
+                "Content-Type": [
+                    "application/json"
+                ]
+            },
+            "body": {
+                "error": "not found"
+            }
+        },
+        "ordered": false
+    }
+]

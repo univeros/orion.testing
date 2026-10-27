@@ -1,0 +1,36 @@
+[
+    {
+        "request": {
+            "method": "GET",
+            "path": "/products/search",
+            "query": {
+                "q": "running"
+            },
+            "headers": {
+                "X-User": "u1",
+                "X-Tenant": "acme"
+            }
+        },
+        "response": {
+            "status": 500,
+            "headers": {
+                "Cache-Control": [
+                    "private, no-store"
+                ],
+                "X-Content-Type-Options": [
+                    "nosniff"
+                ],
+                "Content-Type": [
+                    "application/problem+json"
+                ]
+            },
+            "body": {
+                "type": "https://orion-search.dev/problems/search-failed",
+                "title": "Search failed",
+                "status": 500,
+                "detail": "The search could not be completed; the failure has been logged."
+            }
+        },
+        "ordered": false
+    }
+]

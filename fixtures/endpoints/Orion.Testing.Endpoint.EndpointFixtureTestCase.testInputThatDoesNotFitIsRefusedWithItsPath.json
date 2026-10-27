@@ -1,0 +1,387 @@
+[
+    {
+        "request": {
+            "method": "GET",
+            "path": "/products/search",
+            "query": {
+                "filter": {
+                    "title": "x"
+                }
+            },
+            "headers": {
+                "X-User": "u1",
+                "X-Tenant": "acme"
+            }
+        },
+        "response": {
+            "status": 400,
+            "headers": {
+                "Cache-Control": [
+                    "private, no-store"
+                ],
+                "X-Content-Type-Options": [
+                    "nosniff"
+                ],
+                "Content-Type": [
+                    "application/problem+json"
+                ]
+            },
+            "body": {
+                "type": "https://orion-search.dev/problems/invalid-request",
+                "title": "Invalid request",
+                "status": 400,
+                "detail": "filter.title: this endpoint filters by brand, sku, stock."
+            }
+        },
+        "ordered": false
+    },
+    {
+        "request": {
+            "method": "GET",
+            "path": "/products/search",
+            "query": {
+                "filter": {
+                    "stock": "many"
+                }
+            },
+            "headers": {
+                "X-User": "u1",
+                "X-Tenant": "acme"
+            }
+        },
+        "response": {
+            "status": 400,
+            "headers": {
+                "Cache-Control": [
+                    "private, no-store"
+                ],
+                "X-Content-Type-Options": [
+                    "nosniff"
+                ],
+                "Content-Type": [
+                    "application/problem+json"
+                ]
+            },
+            "body": {
+                "type": "https://orion-search.dev/problems/invalid-request",
+                "title": "Invalid request",
+                "status": 400,
+                "detail": "filter.stock must be a whole number, \"many\" given."
+            }
+        },
+        "ordered": false
+    },
+    {
+        "request": {
+            "method": "GET",
+            "path": "/products/search",
+            "query": {
+                "filter": {
+                    "stock": {
+                        "between": "1"
+                    }
+                }
+            },
+            "headers": {
+                "X-User": "u1",
+                "X-Tenant": "acme"
+            }
+        },
+        "response": {
+            "status": 400,
+            "headers": {
+                "Cache-Control": [
+                    "private, no-store"
+                ],
+                "X-Content-Type-Options": [
+                    "nosniff"
+                ],
+                "Content-Type": [
+                    "application/problem+json"
+                ]
+            },
+            "body": {
+                "type": "https://orion-search.dev/problems/invalid-request",
+                "title": "Invalid request",
+                "status": 400,
+                "detail": "filter.stock.between is not a bound (gt, gte, lt, lte)."
+            }
+        },
+        "ordered": false
+    },
+    {
+        "request": {
+            "method": "GET",
+            "path": "/products/search",
+            "query": {
+                "sort": "brand"
+            },
+            "headers": {
+                "X-User": "u1",
+                "X-Tenant": "acme"
+            }
+        },
+        "response": {
+            "status": 400,
+            "headers": {
+                "Cache-Control": [
+                    "private, no-store"
+                ],
+                "X-Content-Type-Options": [
+                    "nosniff"
+                ],
+                "Content-Type": [
+                    "application/problem+json"
+                ]
+            },
+            "body": {
+                "type": "https://orion-search.dev/problems/invalid-request",
+                "title": "Invalid request",
+                "status": 400,
+                "detail": "sort \"brand\": this endpoint sorts by sku, stock, _score."
+            }
+        },
+        "ordered": false
+    },
+    {
+        "request": {
+            "method": "GET",
+            "path": "/products/search",
+            "query": {
+                "page": "0"
+            },
+            "headers": {
+                "X-User": "u1",
+                "X-Tenant": "acme"
+            }
+        },
+        "response": {
+            "status": 400,
+            "headers": {
+                "Cache-Control": [
+                    "private, no-store"
+                ],
+                "X-Content-Type-Options": [
+                    "nosniff"
+                ],
+                "Content-Type": [
+                    "application/problem+json"
+                ]
+            },
+            "body": {
+                "type": "https://orion-search.dev/problems/invalid-request",
+                "title": "Invalid request",
+                "status": 400,
+                "detail": "page must be positive, 0 given."
+            }
+        },
+        "ordered": false
+    },
+    {
+        "request": {
+            "method": "GET",
+            "path": "/products/search",
+            "query": {
+                "size": "11"
+            },
+            "headers": {
+                "X-User": "u1",
+                "X-Tenant": "acme"
+            }
+        },
+        "response": {
+            "status": 400,
+            "headers": {
+                "Cache-Control": [
+                    "private, no-store"
+                ],
+                "X-Content-Type-Options": [
+                    "nosniff"
+                ],
+                "Content-Type": [
+                    "application/problem+json"
+                ]
+            },
+            "body": {
+                "type": "https://orion-search.dev/problems/invalid-request",
+                "title": "Invalid request",
+                "status": 400,
+                "detail": "size is at most 10 on this endpoint, 11 given."
+            }
+        },
+        "ordered": false
+    },
+    {
+        "request": {
+            "method": "GET",
+            "path": "/products/search",
+            "query": {
+                "limit": "5"
+            },
+            "headers": {
+                "X-User": "u1",
+                "X-Tenant": "acme"
+            }
+        },
+        "response": {
+            "status": 400,
+            "headers": {
+                "Cache-Control": [
+                    "private, no-store"
+                ],
+                "X-Content-Type-Options": [
+                    "nosniff"
+                ],
+                "Content-Type": [
+                    "application/problem+json"
+                ]
+            },
+            "body": {
+                "type": "https://orion-search.dev/problems/invalid-request",
+                "title": "Invalid request",
+                "status": 400,
+                "detail": "request.limit is not a known key."
+            }
+        },
+        "ordered": false
+    },
+    {
+        "request": {
+            "method": "GET",
+            "path": "/products/search",
+            "query": {
+                "page": "1001"
+            },
+            "headers": {
+                "X-User": "u1",
+                "X-Tenant": "acme"
+            }
+        },
+        "response": {
+            "status": 400,
+            "headers": {
+                "Cache-Control": [
+                    "private, no-store"
+                ],
+                "X-Content-Type-Options": [
+                    "nosniff"
+                ],
+                "Content-Type": [
+                    "application/problem+json"
+                ]
+            },
+            "body": {
+                "type": "https://orion-search.dev/problems/unsupported-clause",
+                "title": "Unsupported clause",
+                "status": 400,
+                "detail": "engine pages by offset to result 10000 at most; this page reaches result 10010. Narrow the query, or wait for cursor pagination.",
+                "capability": "CursorPagination"
+            }
+        },
+        "ordered": false
+    },
+    {
+        "request": {
+            "method": "GET",
+            "path": "/products/search",
+            "query": {
+                "vector": [
+                    "1"
+                ]
+            },
+            "headers": {
+                "X-User": "u1",
+                "X-Tenant": "acme"
+            }
+        },
+        "response": {
+            "status": 400,
+            "headers": {
+                "Cache-Control": [
+                    "private, no-store"
+                ],
+                "X-Content-Type-Options": [
+                    "nosniff"
+                ],
+                "Content-Type": [
+                    "application/problem+json"
+                ]
+            },
+            "body": {
+                "type": "https://orion-search.dev/problems/invalid-request",
+                "title": "Invalid request",
+                "status": 400,
+                "detail": "vector: this endpoint is not hybrid."
+            }
+        },
+        "ordered": false
+    },
+    {
+        "request": {
+            "method": "GET",
+            "path": "/products/search",
+            "query": {
+                "sort": "sku,-sku"
+            },
+            "headers": {
+                "X-User": "u1",
+                "X-Tenant": "acme"
+            }
+        },
+        "response": {
+            "status": 400,
+            "headers": {
+                "Cache-Control": [
+                    "private, no-store"
+                ],
+                "X-Content-Type-Options": [
+                    "nosniff"
+                ],
+                "Content-Type": [
+                    "application/problem+json"
+                ]
+            },
+            "body": {
+                "type": "https://orion-search.dev/problems/invalid-request",
+                "title": "Invalid request",
+                "status": 400,
+                "detail": "sort names \"sku\" twice."
+            }
+        },
+        "ordered": false
+    },
+    {
+        "request": {
+            "method": "GET",
+            "path": "/products/search",
+            "query": {
+                "q": "shoe shoe shoe shoe shoe shoe shoe shoe shoe shoe shoe shoe shoe shoe shoe shoe shoe shoe shoe shoe shoe shoe shoe shoe shoe shoe shoe shoe shoe shoe shoe shoe shoe shoe shoe shoe shoe shoe shoe shoe shoe shoe shoe shoe shoe shoe shoe shoe shoe shoe shoe shoe shoe shoe shoe shoe shoe shoe shoe shoe shoe shoe shoe shoe shoe "
+            },
+            "headers": {
+                "X-User": "u1",
+                "X-Tenant": "acme"
+            }
+        },
+        "response": {
+            "status": 400,
+            "headers": {
+                "Cache-Control": [
+                    "private, no-store"
+                ],
+                "X-Content-Type-Options": [
+                    "nosniff"
+                ],
+                "Content-Type": [
+                    "application/problem+json"
+                ]
+            },
+            "body": {
+                "type": "https://orion-search.dev/problems/invalid-request",
+                "title": "Invalid request",
+                "status": 400,
+                "detail": "q is at most 64 words."
+            }
+        },
+        "ordered": false
+    }
+]

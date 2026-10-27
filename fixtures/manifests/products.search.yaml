@@ -1,0 +1,18 @@
+# The index the endpoint fixtures search: two tenants share it (org_id), the GET endpoint declares a permission.
+index: products
+org_key: org_id
+schema:
+  title: { type: text, language: en, boost: 2.0 }
+  brand: { type: keyword, filterable: true, facetable: true }
+  sku: { type: keyword, filterable: true, sortable: true }
+  stock: { type: integer, filterable: true, sortable: true }
+  embedding: { type: vector, dims: 3 }
+search:
+  endpoint: GET /products/search
+  permission: products.search
+  query_fields: [title]
+  filterable: [brand, sku, stock]
+  sortable: [sku, stock, _score]
+  facets: [brand]
+  highlight: [title]
+  page_size: 10

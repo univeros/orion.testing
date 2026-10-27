@@ -1,0 +1,372 @@
+[
+    {
+        "request": {
+            "method": "GET",
+            "path": "/products/search",
+            "query": [],
+            "headers": {
+                "X-User": "u1",
+                "X-Tenant": "acme"
+            }
+        },
+        "response": {
+            "status": 200,
+            "headers": {
+                "Cache-Control": [
+                    "private, no-store"
+                ],
+                "X-Content-Type-Options": [
+                    "nosniff"
+                ],
+                "Content-Type": [
+                    "application/json"
+                ]
+            },
+            "body": {
+                "hits": [
+                    {
+                        "id": "p1",
+                        "score": 1,
+                        "source": {
+                            "title": "Acme trail running shoe",
+                            "brand": "AcmeOnly",
+                            "sku": "A-1",
+                            "stock": 3,
+                            "org_id": "acme"
+                        },
+                        "highlights": []
+                    },
+                    {
+                        "id": "p2",
+                        "score": 1,
+                        "source": {
+                            "title": "Acme road running shoe",
+                            "brand": "Shared",
+                            "sku": "A-2",
+                            "stock": 5,
+                            "org_id": "acme"
+                        },
+                        "highlights": []
+                    },
+                    {
+                        "id": "p3",
+                        "score": 1,
+                        "source": {
+                            "title": "Acme hiking boot",
+                            "brand": "Shared",
+                            "sku": "A-3",
+                            "stock": 0,
+                            "org_id": "acme"
+                        },
+                        "highlights": []
+                    }
+                ],
+                "total": 3,
+                "total_is_estimate": false,
+                "facets": {
+                    "brand": {
+                        "Shared": 2,
+                        "AcmeOnly": 1
+                    }
+                },
+                "took_ms": 0.721709,
+                "page": 1,
+                "size": 10
+            }
+        },
+        "ordered": false
+    },
+    {
+        "request": {
+            "method": "GET",
+            "path": "/products/search",
+            "query": [],
+            "headers": {
+                "X-User": "u1",
+                "X-Tenant": "globex"
+            }
+        },
+        "response": {
+            "status": 200,
+            "headers": {
+                "Cache-Control": [
+                    "private, no-store"
+                ],
+                "X-Content-Type-Options": [
+                    "nosniff"
+                ],
+                "Content-Type": [
+                    "application/json"
+                ]
+            },
+            "body": {
+                "hits": [
+                    {
+                        "id": "p1",
+                        "score": 1,
+                        "source": {
+                            "title": "Globex trail running trail running shoe",
+                            "brand": "GlobexOnly",
+                            "sku": "G-1",
+                            "stock": 9,
+                            "org_id": "globex"
+                        },
+                        "highlights": []
+                    },
+                    {
+                        "id": "p2",
+                        "score": 1,
+                        "source": {
+                            "title": "Globex running running shoe",
+                            "brand": "GlobexOnly",
+                            "sku": "G-2",
+                            "stock": 9,
+                            "org_id": "globex"
+                        },
+                        "highlights": []
+                    },
+                    {
+                        "id": "p3",
+                        "score": 1,
+                        "source": {
+                            "title": "Globex hiking boot",
+                            "brand": "Shared",
+                            "sku": "G-3",
+                            "stock": 9,
+                            "org_id": "globex"
+                        },
+                        "highlights": []
+                    },
+                    {
+                        "id": "p4",
+                        "score": 1,
+                        "source": {
+                            "title": "Globex running sock",
+                            "brand": "GlobexOnly",
+                            "sku": "G-4",
+                            "stock": 9,
+                            "org_id": "globex"
+                        },
+                        "highlights": []
+                    }
+                ],
+                "total": 4,
+                "total_is_estimate": false,
+                "facets": {
+                    "brand": {
+                        "GlobexOnly": 3,
+                        "Shared": 1
+                    }
+                },
+                "took_ms": 0.018791,
+                "page": 1,
+                "size": 10
+            }
+        },
+        "ordered": false
+    },
+    {
+        "request": {
+            "method": "GET",
+            "path": "/products/search",
+            "query": {
+                "q": "running"
+            },
+            "headers": {
+                "X-User": "u1",
+                "X-Tenant": "acme"
+            }
+        },
+        "response": {
+            "status": 200,
+            "headers": {
+                "Cache-Control": [
+                    "private, no-store"
+                ],
+                "X-Content-Type-Options": [
+                    "nosniff"
+                ],
+                "Content-Type": [
+                    "application/json"
+                ]
+            },
+            "body": {
+                "hits": [
+                    {
+                        "id": "p1",
+                        "score": 2,
+                        "source": {
+                            "title": "Acme trail running shoe",
+                            "brand": "AcmeOnly",
+                            "sku": "A-1",
+                            "stock": 3,
+                            "org_id": "acme"
+                        },
+                        "highlights": {
+                            "title": [
+                                "Acme trail <em>running</em> shoe"
+                            ]
+                        }
+                    },
+                    {
+                        "id": "p2",
+                        "score": 2,
+                        "source": {
+                            "title": "Acme road running shoe",
+                            "brand": "Shared",
+                            "sku": "A-2",
+                            "stock": 5,
+                            "org_id": "acme"
+                        },
+                        "highlights": {
+                            "title": [
+                                "Acme road <em>running</em> shoe"
+                            ]
+                        }
+                    }
+                ],
+                "total": 2,
+                "total_is_estimate": false,
+                "facets": {
+                    "brand": {
+                        "AcmeOnly": 1,
+                        "Shared": 1
+                    }
+                },
+                "took_ms": 0.068959,
+                "page": 1,
+                "size": 10
+            }
+        },
+        "ordered": false
+    },
+    {
+        "request": {
+            "method": "GET",
+            "path": "/products/search",
+            "query": {
+                "q": "running"
+            },
+            "headers": {
+                "X-User": "u1",
+                "X-Tenant": "globex"
+            }
+        },
+        "response": {
+            "status": 200,
+            "headers": {
+                "Cache-Control": [
+                    "private, no-store"
+                ],
+                "X-Content-Type-Options": [
+                    "nosniff"
+                ],
+                "Content-Type": [
+                    "application/json"
+                ]
+            },
+            "body": {
+                "hits": [
+                    {
+                        "id": "p1",
+                        "score": 4,
+                        "source": {
+                            "title": "Globex trail running trail running shoe",
+                            "brand": "GlobexOnly",
+                            "sku": "G-1",
+                            "stock": 9,
+                            "org_id": "globex"
+                        },
+                        "highlights": {
+                            "title": [
+                                "Globex trail <em>running</em> trail <em>running</em> shoe"
+                            ]
+                        }
+                    },
+                    {
+                        "id": "p2",
+                        "score": 4,
+                        "source": {
+                            "title": "Globex running running shoe",
+                            "brand": "GlobexOnly",
+                            "sku": "G-2",
+                            "stock": 9,
+                            "org_id": "globex"
+                        },
+                        "highlights": {
+                            "title": [
+                                "Globex <em>running</em> <em>running</em> shoe"
+                            ]
+                        }
+                    },
+                    {
+                        "id": "p4",
+                        "score": 2,
+                        "source": {
+                            "title": "Globex running sock",
+                            "brand": "GlobexOnly",
+                            "sku": "G-4",
+                            "stock": 9,
+                            "org_id": "globex"
+                        },
+                        "highlights": {
+                            "title": [
+                                "Globex <em>running</em> sock"
+                            ]
+                        }
+                    }
+                ],
+                "total": 3,
+                "total_is_estimate": false,
+                "facets": {
+                    "brand": {
+                        "GlobexOnly": 3
+                    }
+                },
+                "took_ms": 0.026333,
+                "page": 1,
+                "size": 10
+            }
+        },
+        "ordered": false
+    },
+    {
+        "request": {
+            "method": "GET",
+            "path": "/products/search",
+            "query": {
+                "q": "globex"
+            },
+            "headers": {
+                "X-User": "u1",
+                "X-Tenant": "acme"
+            }
+        },
+        "response": {
+            "status": 200,
+            "headers": {
+                "Cache-Control": [
+                    "private, no-store"
+                ],
+                "X-Content-Type-Options": [
+                    "nosniff"
+                ],
+                "Content-Type": [
+                    "application/json"
+                ]
+            },
+            "body": {
+                "hits": [],
+                "total": 0,
+                "total_is_estimate": false,
+                "facets": {
+                    "brand": []
+                },
+                "took_ms": 0.010625,
+                "page": 1,
+                "size": 10
+            }
+        },
+        "ordered": false
+    }
+]

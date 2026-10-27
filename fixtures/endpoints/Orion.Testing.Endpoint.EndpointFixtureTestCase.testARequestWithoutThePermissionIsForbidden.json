@@ -1,0 +1,36 @@
+[
+    {
+        "request": {
+            "method": "GET",
+            "path": "/products/search",
+            "query": {
+                "q": "running"
+            },
+            "headers": {
+                "X-User": "u2",
+                "X-Tenant": "acme"
+            }
+        },
+        "response": {
+            "status": 403,
+            "headers": {
+                "Cache-Control": [
+                    "private, no-store"
+                ],
+                "X-Content-Type-Options": [
+                    "nosniff"
+                ],
+                "Content-Type": [
+                    "application/problem+json"
+                ]
+            },
+            "body": {
+                "type": "https://orion-search.dev/problems/forbidden",
+                "title": "Forbidden",
+                "status": 403,
+                "detail": "This endpoint needs the permission products.search."
+            }
+        },
+        "ordered": false
+    }
+]

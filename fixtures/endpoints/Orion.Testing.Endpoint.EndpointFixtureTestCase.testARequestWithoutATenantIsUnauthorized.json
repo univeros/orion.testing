@@ -1,0 +1,35 @@
+[
+    {
+        "request": {
+            "method": "GET",
+            "path": "/products/search",
+            "query": {
+                "q": "running"
+            },
+            "headers": {
+                "X-User": "u1"
+            }
+        },
+        "response": {
+            "status": 401,
+            "headers": {
+                "Cache-Control": [
+                    "private, no-store"
+                ],
+                "X-Content-Type-Options": [
+                    "nosniff"
+                ],
+                "Content-Type": [
+                    "application/problem+json"
+                ]
+            },
+            "body": {
+                "type": "https://orion-search.dev/problems/no-tenant",
+                "title": "Unauthorized",
+                "status": 401,
+                "detail": "This request has no tenant: authenticate, and select an organization."
+            }
+        },
+        "ordered": false
+    }
+]

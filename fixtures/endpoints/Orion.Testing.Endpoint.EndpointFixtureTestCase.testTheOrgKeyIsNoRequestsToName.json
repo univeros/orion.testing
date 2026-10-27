@@ -1,0 +1,111 @@
+[
+    {
+        "request": {
+            "method": "GET",
+            "path": "/products/search",
+            "query": {
+                "filter": {
+                    "org_id": "globex"
+                }
+            },
+            "headers": {
+                "X-User": "u1",
+                "X-Tenant": "acme"
+            }
+        },
+        "response": {
+            "status": 400,
+            "headers": {
+                "Cache-Control": [
+                    "private, no-store"
+                ],
+                "X-Content-Type-Options": [
+                    "nosniff"
+                ],
+                "Content-Type": [
+                    "application/problem+json"
+                ]
+            },
+            "body": {
+                "type": "https://orion-search.dev/problems/invalid-request",
+                "title": "Invalid request",
+                "status": 400,
+                "detail": "filter.org_id: this endpoint filters by brand, sku, stock."
+            }
+        },
+        "ordered": false
+    },
+    {
+        "request": {
+            "method": "GET",
+            "path": "/products/search",
+            "query": {
+                "sort": "org_id"
+            },
+            "headers": {
+                "X-User": "u1",
+                "X-Tenant": "acme"
+            }
+        },
+        "response": {
+            "status": 400,
+            "headers": {
+                "Cache-Control": [
+                    "private, no-store"
+                ],
+                "X-Content-Type-Options": [
+                    "nosniff"
+                ],
+                "Content-Type": [
+                    "application/problem+json"
+                ]
+            },
+            "body": {
+                "type": "https://orion-search.dev/problems/invalid-request",
+                "title": "Invalid request",
+                "status": 400,
+                "detail": "sort \"org_id\": this endpoint sorts by sku, stock, _score."
+            }
+        },
+        "ordered": false
+    },
+    {
+        "request": {
+            "method": "POST",
+            "path": "/items/search",
+            "body": {
+                "filter": {
+                    "org_id": [
+                        "acme",
+                        "globex"
+                    ]
+                }
+            },
+            "headers": {
+                "X-User": "u1",
+                "X-Tenant": "acme"
+            }
+        },
+        "response": {
+            "status": 400,
+            "headers": {
+                "Cache-Control": [
+                    "private, no-store"
+                ],
+                "X-Content-Type-Options": [
+                    "nosniff"
+                ],
+                "Content-Type": [
+                    "application/problem+json"
+                ]
+            },
+            "body": {
+                "type": "https://orion-search.dev/problems/invalid-request",
+                "title": "Invalid request",
+                "status": 400,
+                "detail": "filter.org_id: this endpoint filters by brand."
+            }
+        },
+        "ordered": false
+    }
+]

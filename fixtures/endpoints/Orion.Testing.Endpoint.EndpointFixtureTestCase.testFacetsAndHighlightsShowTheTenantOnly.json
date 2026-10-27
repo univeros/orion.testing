@@ -1,0 +1,92 @@
+[
+    {
+        "request": {
+            "method": "GET",
+            "path": "/products/search",
+            "query": {
+                "q": "running"
+            },
+            "headers": {
+                "X-User": "u1",
+                "X-Tenant": "globex"
+            }
+        },
+        "response": {
+            "status": 200,
+            "headers": {
+                "Cache-Control": [
+                    "private, no-store"
+                ],
+                "X-Content-Type-Options": [
+                    "nosniff"
+                ],
+                "Content-Type": [
+                    "application/json"
+                ]
+            },
+            "body": {
+                "hits": [
+                    {
+                        "id": "p1",
+                        "score": 4,
+                        "source": {
+                            "title": "Globex trail running trail running shoe",
+                            "brand": "GlobexOnly",
+                            "sku": "G-1",
+                            "stock": 9,
+                            "org_id": "globex"
+                        },
+                        "highlights": {
+                            "title": [
+                                "Globex trail <em>running</em> trail <em>running</em> shoe"
+                            ]
+                        }
+                    },
+                    {
+                        "id": "p2",
+                        "score": 4,
+                        "source": {
+                            "title": "Globex running running shoe",
+                            "brand": "GlobexOnly",
+                            "sku": "G-2",
+                            "stock": 9,
+                            "org_id": "globex"
+                        },
+                        "highlights": {
+                            "title": [
+                                "Globex <em>running</em> <em>running</em> shoe"
+                            ]
+                        }
+                    },
+                    {
+                        "id": "p4",
+                        "score": 2,
+                        "source": {
+                            "title": "Globex running sock",
+                            "brand": "GlobexOnly",
+                            "sku": "G-4",
+                            "stock": 9,
+                            "org_id": "globex"
+                        },
+                        "highlights": {
+                            "title": [
+                                "Globex <em>running</em> sock"
+                            ]
+                        }
+                    }
+                ],
+                "total": 3,
+                "total_is_estimate": false,
+                "facets": {
+                    "brand": {
+                        "GlobexOnly": 3
+                    }
+                },
+                "took_ms": 0.04675,
+                "page": 1,
+                "size": 10
+            }
+        },
+        "ordered": false
+    }
+]

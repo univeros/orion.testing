@@ -1,0 +1,16 @@
+# The same documents behind a hybrid POST endpoint without a permission.
+index: items
+org_key: org_id
+schema:
+  title: { type: text, language: en }
+  brand: { type: keyword, filterable: true, facetable: true }
+  sku: { type: keyword, filterable: true, sortable: true }
+  stock: { type: integer, filterable: true, sortable: true }
+  embedding: { type: vector, dims: 3 }
+search:
+  endpoint: POST /items/search
+  query_fields: [title]
+  hybrid: { vector_field: embedding, fusion: reciprocal_rank }
+  filterable: [brand]
+  sortable: [_score]
+  page_size: 10
