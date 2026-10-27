@@ -6,6 +6,7 @@ namespace Orion\Testing;
 
 use InvalidArgumentException;
 use Orion\Adapter\Capability;
+use Orion\Adapter\QueryCompiling;
 use Orion\Adapter\RequiresReindex;
 use Orion\Adapter\SchemaAdapter;
 use Orion\Adapter\SearchAdapter;
@@ -31,9 +32,13 @@ use PHPUnit\Framework\TestCase;
 
 use function array_map;
 use function bin2hex;
+use function json_decode;
+use function json_encode;
 use function random_bytes;
 use function sort;
 use function stripos;
+
+use const JSON_THROW_ON_ERROR;
 
 /**
  * What every engine adapter must do before it ships (v1 §18.1): schema create, inspect, plan and in-place apply
@@ -612,6 +617,61 @@ abstract class EngineConformanceTestCase extends TestCase
         $this->expectException(UnsupportedClause::class);
 
         $this->search($this->query()->match('title', 'running')->vector('embedding', [1.0, 0.0, 0.0], k: 2)->fuse(Fusion::reciprocalRank()));
+    }
+
+    // --- compile --------------------------------------------------------------------------------------------------
+
+    public function testCompileShowsTheRequestASearchWouldSendWithoutSendingIt(): void
+    {
+        $engine = $this->engine;
+        self::assertInstanceOf(QueryCompiling::class, $engine, 'Every engine shows its native query (v1 §15, compile_query).');
+        $this->seed();
+        $query = $this->query()->match('title', 'running')->filter(Filter::term('brand', 'acme'))->sort('sku')->paginate(1, 2);
+
+        $compiled = $engine->compile($this->index, $query);
+
+        self::assertNotSame([], $compiled);
+        self::assertSame($compiled, $engine->compile($this->index, $query), 'Compiling is deterministic.');
+        self::assertNotSame($compiled, $engine->compile($this->index, $this->query()->match('title', 'boot')), 'The native form follows the query.');
+        self::assertIsArray(json_decode(json_encode($compiled, JSON_THROW_ON_ERROR), true), 'The native form is JSON for the agent to read.');
+        self::assertNotSame([], $this->search($query)->hits, 'The search still runs the same query.');
+    }
+
+    public function testTheCompiledRequestAnswersAsSearchDoes(): void
+    {
+        $engine = $this->engine;
+        self::assertInstanceOf(QueryCompiling::class, $engine);
+        $this->seed();
+        $queries = [
+            'lexical, filtered, sorted' => $this->query()->match('title', 'running')->filter(Filter::term('brand', 'acme'))->sort('sku')->paginate(1, 2),
+            'range and facets' => $this->query()->filter(Filter::range('price', gte: 50.0))->facet('brand')->sort('price', Direction::Desc),
+            'k-NN with a filter' => $this->query()->vector('embedding', [1.0, 0.0, 0.0], k: 3)->filter(Filter::exists('stock')),
+        ];
+        foreach ($queries as $name => $query) {
+            $native = $this->compiledAsNative($engine->compile($this->index, $query));
+            if ($native === null) {
+                self::addToAssertionCount(1);
+
+                return;
+            }
+            $sent = $this->search($query);
+            $replayed = $engine->raw($this->index, $native);
+            self::assertSame($this->ids($sent), $this->ids($replayed), $name . ': the compiled request is the one search sends.');
+            self::assertSame($sent->total, $replayed->total, $name);
+            self::assertSame($sent->facets, $replayed->facets, $name);
+        }
+    }
+
+    /**
+     * The compiled form as the adapter's `raw()` takes it, so the conformance case can send what `compile()` showed
+     * and compare the answer with `search()`'s. Null when the adapter's native form is not a `raw()` body (the
+     * in-memory engine, whose native form is the neutral query itself).
+     *
+     * @param array<array-key, mixed> $compiled
+     */
+    protected function compiledAsNative(array $compiled): ?callable
+    {
+        return null;
     }
 
     // --- escape hatch -------------------------------------------------------------------------------------------

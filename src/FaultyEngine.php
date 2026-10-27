@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace Orion\Testing;
 
+use LogicException;
 use Orion\Adapter\Capability;
 use Orion\Adapter\PendingTask;
+use Orion\Adapter\QueryCompiling;
 use Orion\Adapter\SchemaAdapter;
 use Orion\Adapter\SearchAdapter;
 use Orion\Adapter\WriteAdapter;
@@ -21,7 +23,9 @@ use Orion\Write\Document;
 use Orion\Write\Tombstone;
 use Override;
 
+use function array_push;
 use function array_slice;
+use function in_array;
 use function sprintf;
 
 /**
@@ -31,7 +35,7 @@ use function sprintf;
  * acknowledged by the engine but lost on the way back). Each fault fires once; {@see revive()} clears what is left.
  * {@see onBulk()} runs a callback before each bulk write reaches the engine: the application writing while Orion works.
  */
-final class FaultyEngine implements SearchAdapter, SchemaAdapter, WriteAdapter
+final class FaultyEngine implements SearchAdapter, SchemaAdapter, WriteAdapter, QueryCompiling
 {
     public const string INDEX = 'index';
     public const string DELETE = 'delete';
@@ -52,6 +56,8 @@ final class FaultyEngine implements SearchAdapter, SchemaAdapter, WriteAdapter
     private $onBulk = null;
     /** @var array<string, callable(): void> verb => what happens just before it, once */
     private array $hooks = [];
+    /** @var list<Capability> capabilities claimed beyond the inner engine's, to steer core's choices */
+    private array $claimed = [];
 
     public function __construct(private readonly SearchAdapter&SchemaAdapter&WriteAdapter $inner)
     {
@@ -106,10 +112,27 @@ final class FaultyEngine implements SearchAdapter, SchemaAdapter, WriteAdapter
         return $this->calls[$verb] ?? 0;
     }
 
+    /**
+     * Claims a capability the inner engine lacks, so core takes the path it would with an engine that has it (the
+     * claim changes nothing about what the inner engine does).
+     */
+    public function claim(Capability ...$capabilities): void
+    {
+        array_push($this->claimed, ...$capabilities);
+    }
+
     #[Override]
     public function supports(Capability $capability): bool
     {
-        return $this->inner->supports($capability);
+        return in_array($capability, $this->claimed, true) || $this->inner->supports($capability);
+    }
+
+    #[Override]
+    public function compile(IndexName $index, Query $query): array
+    {
+        return $this->inner instanceof QueryCompiling
+            ? $this->inner->compile($index, $query)
+            : throw new LogicException('The inner engine cannot show its native query.');
     }
 
     #[Override]
